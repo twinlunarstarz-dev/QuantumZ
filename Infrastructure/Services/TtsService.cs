@@ -7,7 +7,7 @@ using QuantumZ.Core.Models;
 namespace QuantumZ.Infrastructure.Services;
 
 /// <summary>
-/// TTS engine using the llama.cpp server's audio/speech endpoint.
+/// TTS engine using an OpenAI-compatible audio/speech endpoint.
 /// </summary>
 public sealed class TtsService(HttpClient httpClient, ISettingsService settings, IDebugLogger debugLogger, IModelRegistry modelRegistry) : ITtsEngine, ITtsProvider
 {
@@ -36,7 +36,7 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(2));
             var endpoint = await ResolveRemoteBaseUrlAsync(timeoutCts.Token);
-            var response = await httpClient.GetAsync($"{endpoint.TrimEnd('/')}/models", timeoutCts.Token);
+            using var response = await httpClient.GetAsync(BuildEndpoint(endpoint, "models"), timeoutCts.Token);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
@@ -52,9 +52,9 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
             throw new InvalidOperationException("TTS server URL is not configured.");
 
         var selected = await ResolveRemoteModelAsync(ct);
-        var modelId = selected?.Id ?? settings.TtsModelId;
+        var modelId = FirstNonEmpty(selected?.Id, settings.TtsModelId, "tts-default")!;
         var baseUrl = selected?.Endpoint ?? settings.TtsUrl;
-        var endpoint = $"{baseUrl.TrimEnd('/')}/audio/speech";
+        var endpoint = BuildEndpoint(baseUrl, "audio/speech");
 
         var requestBody = new TtsRequest(
             model: modelId,
@@ -64,18 +64,18 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
 
         try
         {
-            debugLogger.LogEvent(new DebugEvent(DateTime.Now, "TTS", LogLevel.Info, "Synthesizing text.", new { TextLength = text.Length, ModelId = modelId }));
-            var response = await httpClient.PostAsJsonAsync(endpoint, requestBody, _jsonOptions, ct);
+            debugLogger.LogEvent(new DebugEvent(DateTime.Now, "TTS", LogLevel.Info, "Synthesizing text.", new { TextLength = text.Length, ModelId = modelId, Endpoint = endpoint }));
+            using var response = await httpClient.PostAsJsonAsync(endpoint, requestBody, _jsonOptions, ct);
             response.EnsureSuccessStatusCode();
             var audioBytes = await response.Content.ReadAsByteArrayAsync(ct);
             debugLogger.LogEvent(new DebugEvent(DateTime.Now, "TTS", LogLevel.Info, $"Synthesis complete: {audioBytes.Length} bytes", new { Bytes = audioBytes.Length }));
             return audioBytes;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             global::Android.Util.Log.Error("QuantumZ", $"TTS Synthesis failed: {ex}");
             debugLogger.Log("TTS", $"Synthesis Error: {ex.Message}", LogLevel.Error);
-            throw; // Re-throw to be handled by the caller (e.g., MicrophoneForegroundService)
+            throw;
         }
     }
 
@@ -97,9 +97,25 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
             .FirstOrDefault();
     }
 
+    private static string NormalizeOpenAiBaseUrl(string? url)
+    {
+        var normalized = url?.Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
+
+        return normalized.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : $"{normalized}/v1";
+    }
+
+    private static string BuildEndpoint(string baseUrl, string path) =>
+        $"{NormalizeOpenAiBaseUrl(baseUrl).TrimEnd('/')}/{path.TrimStart('/')}";
+
     private static bool ModelMatchesSelection(ModelProfile model, string selection) =>
         !string.IsNullOrWhiteSpace(selection)
         && (string.Equals(model.Id, selection, StringComparison.OrdinalIgnoreCase)
             || string.Equals(model.DisplayName, selection, StringComparison.OrdinalIgnoreCase)
             || string.Equals($"{model.Provider}:{model.Id}", selection, StringComparison.OrdinalIgnoreCase));
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
 }
