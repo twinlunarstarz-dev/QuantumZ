@@ -12,7 +12,8 @@ public class LlamaAIClient(
     IDebugLogger debugLogger,
     IDialogService dialogService,
     ILlamaLocalManager llamaLocalManager,
-    IModelRegistry modelRegistry) : IAIClient, ILlmProvider
+    IModelRegistry modelRegistry,
+    IMcpOrchestrator mcpOrchestrator) : IAIClient, ILlmProvider
 {
     private const string RemoteFallbackBaseUrl = ModelRegistry.RemoteLlamaBaseUrl;
     private const string LocalBaseUrl = ModelRegistry.LocalLlamaBaseUrl;
@@ -43,6 +44,8 @@ public class LlamaAIClient(
     public async ValueTask<AiResponse> SendPromptAsync(AiRequest request, CancellationToken ct = default)
     {
         Exception? lastError = null;
+        var messages = BuildMessages(request);
+        var toolDefinitions = await BuildToolDefinitionsAsync(request, ct);
 
         await foreach (var candidate in GetExecutionCandidatesAsync(ct))
         {
@@ -51,13 +54,9 @@ public class LlamaAIClient(
             try
             {
                 var endpoint = BuildEndpoint(candidate.BaseUrl, "chat/completions");
-                var llamaRequest = new LlamaChatRequest(
-                    model: candidate.ModelId,
-                    messages: BuildMessages(request),
-                    temperature: request.Temperature,
-                    max_tokens: request.MaxTokens);
+                var llamaRequest = BuildChatRequest(candidate.ModelId, messages, request.Temperature, request.MaxTokens, stream: false, toolDefinitions);
 
-                debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, $"Sending prompt to {endpoint} using model {candidate.ModelId}.", new { PromptLength = request.Prompt.Length, candidate.ModelId, candidate.BaseUrl }));
+                debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, $"Sending prompt to {endpoint} using model {candidate.ModelId}.", new { PromptLength = request.Prompt.Length, candidate.ModelId, candidate.BaseUrl, ToolCount = toolDefinitions?.Count ?? 0 }));
                 using var response = await httpClient.PostAsJsonAsync(endpoint, llamaRequest, _jsonOptions, ct);
                 response.EnsureSuccessStatusCode();
 
@@ -95,16 +94,12 @@ public class LlamaAIClient(
     public async IAsyncEnumerable<string> StreamPromptAsync(AiRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
         Exception? lastError = null;
+        var messages = BuildMessages(request);
 
         await foreach (var candidate in GetExecutionCandidatesAsync(ct))
         {
             var endpoint = BuildEndpoint(candidate.BaseUrl, "chat/completions");
-            var llamaRequest = new LlamaChatRequest(
-                model: candidate.ModelId,
-                messages: BuildMessages(request),
-                temperature: request.Temperature,
-                max_tokens: request.MaxTokens,
-                stream: true);
+            var llamaRequest = BuildChatRequest(candidate.ModelId, messages, request.Temperature, request.MaxTokens, stream: true, toolDefinitions: null);
 
             debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, $"Sending streaming prompt to {endpoint} using model {candidate.ModelId}.", new { PromptLength = request.Prompt.Length, candidate.ModelId, candidate.BaseUrl }));
 
@@ -152,6 +147,32 @@ public class LlamaAIClient(
         throw new HttpRequestException("AI Server is unreachable.", lastError);
     }
 
+    private static Dictionary<string, object?> BuildChatRequest(
+        string modelId,
+        List<Dictionary<string, object?>> messages,
+        float temperature,
+        int maxTokens,
+        bool stream,
+        List<Dictionary<string, object?>>? toolDefinitions)
+    {
+        var request = new Dictionary<string, object?>
+        {
+            ["model"] = modelId,
+            ["messages"] = messages,
+            ["temperature"] = temperature,
+            ["max_tokens"] = maxTokens,
+            ["stream"] = stream
+        };
+
+        if (toolDefinitions is { Count: > 0 })
+        {
+            request["tools"] = toolDefinitions;
+            request["tool_choice"] = "auto";
+        }
+
+        return request;
+    }
+
     private static List<Dictionary<string, object?>> BuildMessages(AiRequest request)
     {
         var messages = request.History.Select(ToWireMessage).ToList();
@@ -169,21 +190,65 @@ public class LlamaAIClient(
         };
 
         if (!string.IsNullOrWhiteSpace(message.ToolCallId))
-            wire["tool" + "_call_id"] = message.ToolCallId;
+            wire["tool_call_id"] = message.ToolCallId;
 
         if (message.ToolCalls is { Count: > 0 })
-            wire["tool" + "_calls"] = message.ToolCalls;
+            wire["tool_calls"] = message.ToolCalls;
 
         return wire;
     }
 
-    private record LlamaChatRequest(
-        string model,
-        List<Dictionary<string, object?>> messages,
-        float temperature,
-        int max_tokens,
-        bool stream = false
-    );
+    private async ValueTask<List<Dictionary<string, object?>>?> BuildToolDefinitionsAsync(AiRequest request, CancellationToken ct)
+    {
+        if (!request.EnableToolCalling)
+            return null;
+
+        try
+        {
+            var discoveredTools = await mcpOrchestrator.DiscoverToolsAsync(ct);
+            var definitions = discoveredTools
+                .Where(tool => !string.IsNullOrWhiteSpace(tool.Name))
+                .Select(tool => new Dictionary<string, object?>
+                {
+                    ["type"] = "function",
+                    ["function"] = new Dictionary<string, object?>
+                    {
+                        ["name"] = tool.Name,
+                        ["description"] = tool.Description,
+                        ["parameters"] = ParseToolSchema(tool.InputSchemaJson)
+                    }
+                })
+                .ToList();
+
+            return definitions.Count == 0 ? null : definitions;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            debugLogger.Log("AIClient", $"MCP tool discovery failed; continuing without tools. {ex.Message}", LogLevel.Warning);
+            return null;
+        }
+    }
+
+    private static object ParseToolSchema(string? inputSchemaJson)
+    {
+        if (!string.IsNullOrWhiteSpace(inputSchemaJson))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(inputSchemaJson);
+                return document.RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["type"] = "object",
+            ["properties"] = new Dictionary<string, object?>()
+        };
+    }
 
     private record LlamaChatResponse(
         string Model,
@@ -198,7 +263,7 @@ public class LlamaAIClient(
     private record LlamaMessage(
         string Role,
         string? Content,
-        [property: JsonPropertyName("tool\u005fcalls")] List<LlamaToolCall>? ToolCalls = null
+        [property: JsonPropertyName("tool_calls")] List<LlamaToolCall>? ToolCalls = null
     );
 
     private record LlamaToolCall(
