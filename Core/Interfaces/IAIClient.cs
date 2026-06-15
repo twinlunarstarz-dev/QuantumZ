@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -46,8 +47,8 @@ public record AiResponse(
 public record ChatMessage(
     string Role, // "system", "user", "assistant", "tool"
     string Content,
-    string? ToolCallId = null,
-    List<ToolCall>? ToolCalls = null
+    [property: JsonPropertyName("tool\u005fcall\u005fid")] string? ToolCallId = null,
+    [property: JsonPropertyName("tool\u005fcalls")] List<ToolCall>? ToolCalls = null
 )
 {
     public List<ToolCall> ToolCalls { get; init; } = ToolCalls ?? [];
