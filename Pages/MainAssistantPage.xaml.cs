@@ -6,6 +6,7 @@ public partial class MainAssistantPage : ContentPage
 {
     private CancellationTokenSource? _pulseCancellation;
     private CancellationTokenSource? _waveformCancellation;
+    private bool _visualizerEventsAttached;
 
     public MainAssistantPage(MainAssistantViewModel viewModel)
     {
@@ -27,7 +28,12 @@ public partial class MainAssistantPage : ContentPage
         base.OnAppearing();
         if (BindingContext is MainAssistantViewModel vm)
         {
-            vm.AttachVisualizerEvents();
+            if (!_visualizerEventsAttached)
+            {
+                vm.AttachVisualizerEvents();
+                _visualizerEventsAttached = true;
+            }
+
             _ = vm.InitializeAssetsAsync();
         }
         StartPulseAnimation();
@@ -42,9 +48,10 @@ public partial class MainAssistantPage : ContentPage
         _waveformCancellation?.Cancel();
         _waveformCancellation?.Dispose();
         _waveformCancellation = null;
-        if (BindingContext is MainAssistantViewModel vm)
+        if (_visualizerEventsAttached && BindingContext is MainAssistantViewModel vm)
         {
             vm.DetachVisualizerEvents();
+            _visualizerEventsAttached = false;
         }
         base.OnDisappearing();
     }
@@ -113,13 +120,11 @@ public partial class MainAssistantPage : ContentPage
     {
         if (isOpen)
         {
-            // Focus view shrinks and moves up slightly to make room for the panel
             await Task.WhenAll(
                 FocusContainer.ScaleTo(0.92, 400, Easing.CubicOut),
                 FocusContainer.TranslateTo(0, -20, 400, Easing.CubicOut)
             );
 
-            // Detail panel slides up and fades in
             await Task.WhenAll(
                 DetailPanel.TranslateTo(0, 0, 500, Easing.CubicOut),
                 DetailPanel.FadeTo(1, 500, Easing.CubicOut)
@@ -127,13 +132,11 @@ public partial class MainAssistantPage : ContentPage
         }
         else
         {
-            // Detail panel slides down and fades out
             await Task.WhenAll(
                 DetailPanel.TranslateTo(0, 500, 400, Easing.CubicIn),
                 DetailPanel.FadeTo(0, 400, Easing.CubicIn)
             );
 
-            // Focus view restores to original state
             await Task.WhenAll(
                 FocusContainer.ScaleTo(1.0, 400, Easing.CubicOut),
                 FocusContainer.TranslateTo(0, 0, 400, Easing.CubicOut)
