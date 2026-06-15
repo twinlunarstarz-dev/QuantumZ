@@ -1,0 +1,42 @@
+# .NET / MAUI GitIgnore
+
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.useros//
+*.sln.Hashed.lock
+*.cache
+*.log
+
+# Rider and JetBrains
+.idea/
+*.sl_solution
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# User-specific files
+*.user
+*.suo
+
+# MAUI / Android specific
+*.apk
+*.aab
+*.bundle
+Tls*
+*/platforms/android/bin/
+*/platforms/ios/bin/
+
+# Environment and Secrets (Crucial)
+.env
+.env.*
+secrets.json
+appsettings.Development.json
+**/user.config

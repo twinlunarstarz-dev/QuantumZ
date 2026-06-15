@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- Crimson Nexus Palette (architecture.md exact values) -->
+    <Color x:Key="CrimsonBackground">#0A0A0A</Color>
+    <Color x:Key="CrimsonSurface">#111111</Color>
+    <Color x:Key="CrimsonSurfaceElevated">#1A1A1A</Color>
+    <Color x:Key="CrimsonPrimaryAccent">#FF003C</Color>
+    <Color x:Key="CrimsonSecondaryAccent">#FF335F</Color>
+    <Color x:Key="CrimsonSuccess">#00FF88</Color>
+    <Color x:Key="CrimsonWarning">#FFB300</Color>
+    <Color x:Key="CrimsonError">#FF3355</Color>
+    <Color x:Key="CrimsonTextPrimary">#FFFFFF</Color>
+    <Color x:Key="CrimsonTextSecondary">#AAAAAA</Color>
+
+    <!-- Tactical HUD translucent overlays -->
+    <Color x:Key="CrimsonGlassBackground">#CC111111</Color>
+    <Color x:Key="CrimsonGlassInset">#991A1A1A</Color>
+    <Color x:Key="CrimsonGlassBorder">#66FF003C</Color>
+    <Color x:Key="CrimsonGlassHighlight">#24FFFFFF</Color>
+    <Color x:Key="CrimsonNeonDim">#4DFF003C</Color>
+    <Color x:Key="CrimsonNeonSoft">#33FF335F</Color>
+    <Color x:Key="CrimsonShadowRed">#B3FF003C</Color>
+    <Color x:Key="CrimsonScanline">#14FF003C</Color>
+
+    <!-- Backward-compatible aliases used by existing pages -->
+    <Color x:Key="CyberBlackDeep">#0A0A0A</Color>
+    <Color x:Key="CyberBlackSurface">#111111</Color>
+    <Color x:Key="CyberBlackElevated">#1A1A1A</Color>
+    <Color x:Key="CyberRedNeon">#FF003C</Color>
+    <Color x:Key="CyberRedGlow">#FF335F</Color>
+    <Color x:Key="CyberRedSoft">#4DFF003C</Color>
+    <Color x:Key="CyberGrayDark">#1A1A1A</Color>
+    <Color x:Key="CyberGrayTranslucent">#991A1A1A</Color>
+    <Color x:Key="CyberWhiteText">#FFFFFF</Color>
+    <Color x:Key="CyberTextMuted">#AAAAAA</Color>
+    <Color x:Key="CyberRedMuted">#FF335F</Color>
+
+    <!-- Glassmorphism aliases -->
+    <Color x:Key="GlassBackground">#CC111111</Color>
+    <Color x:Key="GlassBorder">#66FF003C</Color>
+    <Color x:Key="GlassHighlight">#24FFFFFF</Color>
+
+</ResourceDictionary>

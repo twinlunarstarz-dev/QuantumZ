@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.BLUETOOTH" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+  <application android:allowBackup="true"
+               android:supportsRtl="true"
+               android:theme="@style/Maui.SplashTheme"
+               android:requestLegacyExternalStorage="true"
+               android:usesCleartextTraffic="true">
+    <service android:name="QuantumZ.Android.Services.MicrophoneForegroundService"
+             android:foregroundServiceType="microphone"
+             android:exported="false" />
+
+    <receiver android:name="QuantumZ.Android.Receivers.ListenBroadcastReceiver"
+              android:exported="true">
+        <intent-filter>
+            <action android:name="com.quantumz.assistant.START_LISTENING" />
+            <action android:name="com.quantumz.assistant.TEST_UTTERANCE" />
+        </intent-filter>
+    </receiver>
+  </application>
+</manifest>

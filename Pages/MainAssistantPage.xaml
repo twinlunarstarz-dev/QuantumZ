@@ -1,0 +1,446 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="QuantumZ.UI.Pages.MainAssistantPage"
+             Title="Crimson Nexus">
+
+    <Grid BackgroundColor="{StaticResource CrimsonBackground}"
+          RowDefinitions="*,Auto">
+
+        <!-- Aerospace HUD background wash -->
+        <BoxView Grid.RowSpan="2"
+                 BackgroundColor="{StaticResource CrimsonBackground}" />
+
+        <BoxView Grid.RowSpan="2"
+                 HeightRequest="360"
+                 Opacity="0.34"
+                 VerticalOptions="Start">
+            <BoxView.Background>
+                <RadialGradientBrush Center="0.52,0.06" Radius="0.86">
+                    <GradientStop Color="{StaticResource CrimsonNeonDim}" Offset="0.0" />
+                    <GradientStop Color="{StaticResource CrimsonBackground}" Offset="1.0" />
+                </RadialGradientBrush>
+            </BoxView.Background>
+        </BoxView>
+
+        <Grid Grid.RowSpan="2"
+              InputTransparent="True"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              RowSpacing="28"
+              Opacity="0.38">
+            <BoxView Grid.Row="0" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="1" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="2" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="3" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="4" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="5" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="6" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="7" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+        </Grid>
+
+        <Grid Grid.Row="0">
+            <!-- Focus Layer: Core HUD elements -->
+            <VerticalStackLayout x:Name="FocusContainer"
+                                 Spacing="16"
+                                 Padding="18,18,18,0"
+                                 VerticalOptions="Start">
+                <!-- Command header -->
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto"
+                      ColumnSpacing="10">
+                    <VerticalStackLayout Grid.Column="0" Spacing="2">
+                        <Label Text="QUANTUMZ"
+                               Style="{StaticResource CyberLabelHeader}"
+                               FontSize="30"
+                               HorizontalOptions="Start" />
+                        <Label Text="CRIMSON NEXUS // AEROSPACE ASSISTANT HUD"
+                               Style="{StaticResource CyberLabelMuted}"
+                               FontSize="11"
+                               CharacterSpacing="1.2"
+                               HorizontalOptions="Start" />
+                    </VerticalStackLayout>
+
+                    <Button Grid.Column="1"
+                            Text="DETAILS"
+                            Command="{Binding ToggleDetailCommand}"
+                            Style="{StaticResource CompactGhostButton}"
+                            VerticalOptions="Center" />
+
+                    <Button Grid.Column="2"
+                            Text="MEMORY"
+                            Command="{Binding NavigateToMemoryCommand}"
+                            Style="{StaticResource CompactGhostButton}"
+                            VerticalOptions="Center" />
+
+                    <Button Grid.Column="3"
+                            Text="CONFIG"
+                            Command="{Binding NavigateToSettingsCommand}"
+                            Style="{StaticResource CompactGhostButton}"
+                            VerticalOptions="Center" />
+                </Grid>
+
+                <!-- Live operational strip -->
+                <Border Style="{StaticResource HudPanel}">
+                    <Grid RowDefinitions="Auto,Auto"
+                          RowSpacing="12">
+                        <Grid Grid.Row="0"
+                               ColumnDefinitions="Auto,*,Auto"
+                               ColumnSpacing="12">
+                            <Border Grid.Column="0"
+                                    BackgroundColor="{Binding StatusColor, Converter={StaticResource HexToColorConverter}}"
+                                    WidthRequest="12"
+                                    HeightRequest="12"
+                                    VerticalOptions="Center">
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="6" />
+                                </Border.StrokeShape>
+                                <Border.Shadow>
+                                    <Shadow Brush="{StaticResource CrimsonPrimaryAccent}"
+                                            Offset="0,0"
+                                            Radius="12"
+                                            Opacity="0.9" />
+                                </Border.Shadow>
+                            </Border>
+
+                            <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                <Label Text="TACTICAL ASSISTANT CORE"
+                                       Style="{StaticResource CyberLabelSection}"
+                                       Margin="0"
+                                       FontSize="12" />
+                                <Label Text="Audio engine, provider router, memory loop, and MCP fabric are staged for command execution."
+                                       Style="{StaticResource CyberLabelMuted}"
+                                       FontSize="11"
+                                       LineBreakMode="TailTruncation" />
+                            </VerticalStackLayout>
+
+                            <Border Grid.Column="2"
+                                    Style="{StaticResource StatusPill}"
+                                    VerticalOptions="Center">
+                                <Label Text="{Binding AiStatusText}"
+                                       TextColor="{Binding StatusColor, Converter={StaticResource HexToColorConverter}}"
+                                       FontSize="11"
+                                       FontAttributes="Bold"
+                                       CharacterSpacing="1.1" />
+                            </Border>
+                        </Grid>
+
+                        <ProgressBar Grid.Row="1"
+                                      Progress="{Binding AudioLevel}"
+                                      ProgressColor="{StaticResource CrimsonPrimaryAccent}"
+                                      BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
+                                      HeightRequest="4" />
+                    </Grid>
+                </Border>
+
+                <!-- Assistant orb and VAD waveform -->
+                <Border Style="{StaticResource NeonFrame}"
+                        MinimumHeightRequest="430">
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+                          RowSpacing="16">
+
+                        <Grid Grid.Row="0"
+                               HeightRequest="284">
+                            <Border x:Name="AssistantRing"
+                                    WidthRequest="264"
+                                    HeightRequest="264"
+                                    HorizontalOptions="Center"
+                                    VerticalOptions="Center"
+                                    Stroke="{Binding StatusColor, Converter={StaticResource HexToColorConverter}}"
+                                    StrokeThickness="2"
+                                    BackgroundColor="{StaticResource CrimsonGlassInset}">
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="132" />
+                                </Border.StrokeShape>
+                                <Border.Shadow>
+                                    <Shadow Brush="{StaticResource CrimsonPrimaryAccent}"
+                                            Offset="0,0"
+                                            Radius="42"
+                                            Opacity="0.64" />
+                                </Border.Shadow>
+
+                                <Grid>
+                                    <Ellipse WidthRequest="226"
+                                             HeightRequest="226"
+                                             Stroke="{StaticResource CrimsonGlassBorder}"
+                                             StrokeThickness="1"
+                                             Fill="Transparent"
+                                             HorizontalOptions="Center"
+                                             VerticalOptions="Center" />
+                                    <Ellipse WidthRequest="178"
+                                             HeightRequest="178"
+                                             Stroke="{StaticResource CrimsonSecondaryAccent}"
+                                             StrokeThickness="1"
+                                             Opacity="0.42"
+                                             Fill="Transparent"
+                                             HorizontalOptions="Center"
+                                             VerticalOptions="Center" />
+                                    <Border x:Name="AssistantOrb"
+                                            WidthRequest="126"
+                                            HeightRequest="126"
+                                            HorizontalOptions="Center"
+                                            VerticalOptions="Center"
+                                            BackgroundColor="{Binding StatusColor, Converter={StaticResource HexToColorConverter}}"
+                                            Opacity="0.68"
+                                            Stroke="{StaticResource CrimsonTextPrimary}"
+                                            StrokeThickness="1">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border"
+                                                           Binding="{Binding IsDetectingActivity}"
+                                                           Value="True">
+                                                <Setter Property="Opacity" Value="0.95" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="63" />
+                                        </Border.StrokeShape>
+                                        <Border.Shadow>
+                                            <Shadow Brush="{StaticResource CrimsonPrimaryAccent}"
+                                                    Offset="0,0"
+                                                    Radius="30"
+                                                    Opacity="0.8" />
+                                        </Border.Shadow>
+                                    </Border>
+
+                                    <Image Source="{Binding AssistantImageSource}"
+                                           Aspect="AspectFit"
+                                           WidthRequest="190"
+                                           HeightRequest="190"
+                                           Opacity="0.42"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center" />
+
+                                    <Label Text="VAD"
+                                           TextColor="{StaticResource CrimsonTextPrimary}"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           CharacterSpacing="2"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <VerticalStackLayout Grid.Row="1"
+                                              HorizontalOptions="Center"
+                                              Spacing="4">
+                            <Label Text="{Binding AiStatusText}"
+                                   Style="{StaticResource CyberLabelTitle}"
+                                   HorizontalOptions="Center" />
+                            <Label Text="VOICE ACTIVITY DETECTION MATRIX"
+                                   Style="{StaticResource HudMetricLabel}"
+                                   HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+
+                        <HorizontalStackLayout Grid.Row="2"
+                                                HeightRequest="58"
+                                                HorizontalOptions="Center"
+                                                VerticalOptions="Center"
+                                                Spacing="8">
+                            <BoxView x:Name="WaveBar1" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonPrimaryAccent}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar2" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonSecondaryAccent}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar3" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonPrimaryAccent}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar4" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonSecondaryAccent}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar5" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonTextPrimary}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar6" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonTextPrimary}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar7" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonSecondaryAccent}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar8" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonPrimaryAccent}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar9" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonSecondaryAccent}" AnchorY="0.5" />
+                            <BoxView x:Name="WaveBar10" WidthRequest="6" HeightRequest="42" CornerRadius="3" BackgroundColor="{StaticResource CrimsonPrimaryAccent}" AnchorY="0.5" />
+                        </HorizontalStackLayout>
+
+                        <Border Grid.Row="3"
+                                Style="{StaticResource StatusPill}"
+                                HorizontalOptions="Center">
+                            <Label Text="{Binding TranscriptionStatusText}"
+                                   TextColor="{StaticResource CrimsonSuccess}"
+                                   FontSize="11"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="1.4" />
+                        </Border>
+                    </Grid>
+                </Border>
+            </VerticalStackLayout>
+
+            <!-- Detail Layer: Telemetry and Transcripts -->
+            <ScrollView x:Name="DetailPanel"
+                        Padding="18,0,18,0"
+                        TranslationY="500"
+                        Opacity="0">
+                <Grid RowDefinitions="Auto,Auto,Auto"
+                      RowSpacing="16">
+                    <!-- Streaming STT -->
+                    <Border Grid.Row="0"
+                            Style="{StaticResource HudPanel}">
+                        <VerticalStackLayout Spacing="10">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                <Label Grid.Column="0"
+                                       Text="REAL-TIME SPEECH TRANSCRIPT"
+                                       Style="{StaticResource CyberLabelSection}"
+                                       Margin="0" />
+                                <Label Grid.Column="1"
+                                       Text="STREAMING"
+                                       TextColor="{StaticResource CrimsonSuccess}"
+                                       FontSize="10"
+                                       FontAttributes="Bold"
+                                       CharacterSpacing="1.2" />
+                            </Grid>
+                            <Label Text="{Binding StreamingTranscriptDisplay}"
+                                   TextColor="{StaticResource CrimsonTextPrimary}"
+                                   FontSize="17"
+                                   FontAttributes="Bold"
+                                   LineBreakMode="WordWrap"
+                                   MinimumHeightRequest="72" />
+                            <Label Text="{Binding LastTranscription}"
+                                   Style="{StaticResource CyberLabelMuted}"
+                                   FontSize="12"
+                                   LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Monitoring Panels -->
+                    <Grid Grid.Row="1"
+                          ColumnDefinitions="*,*"
+                          ColumnSpacing="14">
+                        <Border Grid.Column="0"
+                                Style="{StaticResource HudPanel}">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="MODEL STATUS"
+                                       Style="{StaticResource CyberLabelSection}"
+                                       Margin="0" />
+                                <Label Text="{Binding ActiveModelName}"
+                                       Style="{StaticResource CyberLabelTitle}"
+                                       FontSize="15"
+                                       LineBreakMode="TailTruncation" />
+                                <Label Text="{Binding ModelEndpointText}"
+                                       Style="{StaticResource CyberLabelMuted}"
+                                       FontSize="11"
+                                       LineBreakMode="TailTruncation" />
+
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ModelStatusItems}"
+                                                     Spacing="8">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="Auto,*"
+                                                  ColumnSpacing="9">
+                                                <BoxView Grid.Column="0"
+                                                         WidthRequest="8"
+                                                         HeightRequest="8"
+                                                         CornerRadius="4"
+                                                         BackgroundColor="{Binding AccentColor, Converter={StaticResource HexToColorConverter}}"
+                                                         VerticalOptions="Center" />
+                                                <VerticalStackLayout Grid.Column="1" Spacing="1">
+                                                    <Label Text="{Binding Label}" Style="{StaticResource HudMetricLabel}" />
+                                                    <Label Text="{Binding Value}" Style="{StaticResource HudMetricValue}" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border Grid.Column="1"
+                                Style="{StaticResource HudPanel}">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="SERVER / GPU MONITOR"
+                                       Style="{StaticResource CyberLabelSection}"
+                                       Margin="0" />
+                                <Label Text="{Binding ServerHealthText}"
+                                       Style="{StaticResource CyberLabelTitle}"
+                                       FontSize="15"
+                                       LineBreakMode="TailTruncation" />
+                                <Label Text="{Binding GpuStatusText}"
+                                       Style="{StaticResource CyberLabelMuted}"
+                                       FontSize="11"
+                                       LineBreakMode="TailTruncation" />
+
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ServerTelemetryItems}"
+                                                     Spacing="8">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="Auto,*"
+                                                  ColumnSpacing="9">
+                                                <BoxView Grid.Column="0"
+                                                         WidthRequest="8"
+                                                         HeightRequest="8"
+                                                         CornerRadius="4"
+                                                         BackgroundColor="{Binding AccentColor, Converter={StaticResource HexToColorConverter}}"
+                                                         VerticalOptions="Center" />
+                                                <VerticalStackLayout Grid.Column="1" Spacing="1">
+                                                    <Label Text="{Binding Label}" Style="{StaticResource HudMetricLabel}" />
+                                                    <Label Text="{Binding Value}" Style="{StaticResource HudMetricValue}" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+
+                    <!-- Response Buffer -->
+                    <Border Grid.Row="2"
+                            Style="{StaticResource HudPanel}"
+                            IsVisible="{Binding LastResponse, Converter={StaticResource StringNotEmptyConverter}}">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="ASSISTANT RESPONSE BUFFER"
+                                   Style="{StaticResource CyberLabelSection}"
+                                   Margin="0" />
+                            <Label Text="{Binding LastResponse}"
+                                   TextColor="{StaticResource CrimsonTextPrimary}"
+                                   FontSize="13"
+                                   LineBreakMode="WordWrap" />
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+            </ScrollView>
+        </Grid>
+
+        <!-- Anchored mission controls -->
+        <Border Grid.Row="1"
+                Padding="18,14,18,20"
+                BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
+                Stroke="{StaticResource CrimsonGlassBorder}"
+                StrokeThickness="1">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="24,24,0,0" />
+            </Border.StrokeShape>
+            <Grid RowDefinitions="Auto,Auto,Auto"
+                  RowSpacing="12">
+                <Grid Grid.Row="0"
+                      ColumnDefinitions="*,*"
+                      ColumnSpacing="12">
+                    <Button Grid.Column="0"
+                            Text="{Binding IsListening, Converter={StaticResource BoolToListenTextConverter}}"
+                            Command="{Binding ToggleListeningCommand}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                            Style="{StaticResource CyberButton}" />
+                    <Button Grid.Column="1"
+                            Text="ABORT LISTEN"
+                            Command="{Binding StopListeningCommand}"
+                            Style="{StaticResource GhostButton}" />
+                </Grid>
+
+                <Grid Grid.Row="1"
+                      ColumnDefinitions="*,*"
+                      ColumnSpacing="12">
+                    <Button Grid.Column="0"
+                            Text="SUMMARIZE"
+                            Command="{Binding SummarizeNowCommand}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                            Style="{StaticResource GhostButton}" />
+                    <Button Grid.Column="1"
+                            Text="ANALYZE"
+                            Command="{Binding AnalyzeNowCommand}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                            Style="{StaticResource GhostButton}" />
+                </Grid>
+
+                <Button Grid.Row="2"
+                        Text="TEST FULL PIPELINE"
+                        Command="{Binding TestPipelineCommand}"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                        Style="{StaticResource GhostButton}" />
+            </Grid>
+        </Border>
+    </Grid>
+</ContentPage>

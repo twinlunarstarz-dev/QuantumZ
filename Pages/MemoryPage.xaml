@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="QuantumZ.UI.Pages.MemoryPage"
+             Title="Memory Vault">
+
+    <Grid BackgroundColor="{StaticResource CyberBlackDeep}"
+          RowDefinitions="*,Auto">
+
+        <BoxView Grid.RowSpan="2"
+                 HeightRequest="200"
+                 Opacity="0.2"
+                 VerticalOptions="Start">
+            <BoxView.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="{StaticResource CyberRedSoft}" Offset="0.0" />
+                    <GradientStop Color="{StaticResource CyberBlackDeep}" Offset="1.0" />
+                </LinearGradientBrush>
+            </BoxView.Background>
+        </BoxView>
+
+        <ScrollView Grid.Row="0"
+                    Padding="20,20,20,8">
+            <VerticalStackLayout Spacing="16">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Memory Vault"
+                           Style="{StaticResource CyberLabelHeader}"
+                           FontSize="26"
+                           HorizontalOptions="Start" />
+                    <Label Text="Browse and search your activity summaries"
+                           Style="{StaticResource CyberLabelMuted}"
+                           FontSize="13" />
+                </VerticalStackLayout>
+
+                <!-- Search -->
+                <Border Style="{StaticResource GlassPanel}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Search Memory"
+                               Style="{StaticResource CyberLabelSection}" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <Entry Grid.Column="0"
+                                   Text="{Binding SearchQuery}"
+                                   Placeholder="Enter keywords..."
+                                   Style="{StaticResource CyberEntry}" />
+                            <Button Grid.Column="1"
+                                    Text="Search"
+                                    Command="{Binding SearchCommand}"
+                                    Style="{StaticResource CompactGhostButton}" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Search Results -->
+                <CollectionView ItemsSource="{Binding SearchResults}"
+                                IsVisible="{Binding SearchResults.Count, Converter={StaticResource IntGreaterThanZeroConverter}}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource InsetGlassPanel}"
+                                    Padding="12"
+                                    Margin="0,4">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label Text="{Binding Title}"
+                                           TextColor="{StaticResource CyberWhiteText}"
+                                           FontSize="14"
+                                           FontAttributes="Bold" />
+                                    <Label Text="{Binding Excerpt}"
+                                           TextColor="{StaticResource CyberTextMuted}"
+                                           FontSize="12"
+                                           LineBreakMode="WordWrap" />
+                                    <Label Text="{Binding Date, StringFormat='{}{0:yyyy-MM-dd}'}"
+                                           TextColor="{StaticResource CyberRedMuted}"
+                                           FontSize="11" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <!-- Summaries -->
+                <Label Text="Recent Summaries"
+                       Style="{StaticResource CyberLabelSection}" />
+
+                <CollectionView ItemsSource="{Binding Summaries}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource GlassPanel}"
+                                    Padding="14"
+                                    Margin="0,6">
+                                <VerticalStackLayout Spacing="6">
+                                    <Label Text="{Binding Date, StringFormat='{}{0:yyyy-MM-dd}'}"
+                                           TextColor="{StaticResource CyberRedNeon}"
+                                           FontSize="16"
+                                           FontAttributes="Bold" />
+                                    <Label Text="{Binding SummaryText}"
+                                           TextColor="{StaticResource CyberWhiteText}"
+                                           FontSize="13"
+                                           LineBreakMode="WordWrap" />
+                                    <Label Text="{Binding KeyEvents, Converter={StaticResource ListToBulletConverter}}"
+                                           TextColor="{StaticResource CyberTextMuted}"
+                                           FontSize="12"
+                                           LineBreakMode="WordWrap" />
+                                    <Label Text="{Binding TotalFragmentsProcessed, StringFormat='Fragments: {0}'}"
+                                           TextColor="{StaticResource CyberRedMuted}"
+                                           FontSize="11" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <BoxView HeightRequest="84" Opacity="0" />
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <Border Grid.Row="1"
+                Padding="18,14,18,20"
+                BackgroundColor="{StaticResource CyberBlackElevated}"
+                Stroke="{StaticResource GlassBorder}"
+                StrokeThickness="1">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="24,24,0,0" />
+            </Border.StrokeShape>
+            <Button Text="Refresh"
+                    Command="{Binding RefreshCommand}"
+                    Style="{StaticResource CyberButton}" />
+        </Border>
+    </Grid>
+</ContentPage>

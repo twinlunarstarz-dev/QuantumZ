@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:QuantumZ.ViewModels"
+             x:Class="QuantumZ.Pages.DebugOverlayPage"
+             Title="System Debug Log"
+             BackgroundColor="#1A1A1A">
+
+
+    <Grid RowDefinitions="Auto, *, Auto" Padding="20">
+        <!-- Header & Filter -->
+        <VerticalStackLayout Grid.Row="0" Spacing="10" Margin="0,0,0,20">
+            <Label Text="Debug Console" 
+                   FontSize="24" 
+                   TextColor="#FF3B3B" 
+                   FontAttributes="Bold" />
+            
+            <Entry Placeholder="Filter logs..." 
+                   Text="{Binding FilterText}" 
+                   TextColor="White" 
+                   PlaceholderColor="Gray" />
+        </VerticalStackLayout>
+
+        <!-- Log List -->
+        <CollectionView Grid.Row="1" 
+                        ItemsSource="{Binding Events}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="Auto, Auto, *" Padding="5">
+                        <Label Grid.Column="0" 
+                               Text="{Binding Timestamp, StringFormat='{0:HH:mm:ss}'}" 
+                               TextColor="Gray" 
+                               FontSize="12" 
+                               Margin="0,0,10,0"/>
+                        
+                        <Label Grid.Column="1" 
+                               Text="{Binding Component}" 
+                               TextColor="#FF3B3B" 
+                               FontAttributes="Bold" 
+                               FontSize="12" 
+                               Margin="0,0,10,0"/>
+                        
+                        <Label Grid.Column="2" 
+                               Text="{Binding Message}" 
+                               TextColor="White" 
+                               FontSize="12" />
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- Footer Actions -->
+        <HorizontalStackLayout Grid.Row="2" 
+                               Spacing="20" 
+                               HorizontalOptions="Center" 
+                               Margin="0,20,0,0">
+            <Button Text="Clear Logs" 
+                    Command="{Binding ClearLogs}" 
+                    BackgroundColor="#333" 
+                    TextColor="White" />
+        </HorizontalStackLayout>
+    </Grid>
+</ContentPage>
