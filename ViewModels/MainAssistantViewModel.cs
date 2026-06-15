@@ -46,13 +46,7 @@ public class MainAssistantViewModel(
     public bool IsListening
     {
         get => _isListening;
-        set
-        {
-            if (EqualityComparer<bool>.Default.Equals(_isListening, value)) return;
-            SetProperty(ref _isListening, value);
-            if (_stopListeningCommand is RelayCommand stopCommand)
-                stopCommand.NotifyCanExecuteChanged();
-        }
+        set => SetProperty(ref _isListening, value);
     }
 
     private bool _isDetectingActivity;
@@ -161,7 +155,7 @@ public class MainAssistantViewModel(
     public ICommand ToggleListeningCommand => _toggleListeningCommand ??= new AsyncRelayCommand(ToggleListeningAsync);
 
     private ICommand? _stopListeningCommand;
-    public ICommand StopListeningCommand => _stopListeningCommand ??= new RelayCommand(StopListening, () => IsListening);
+    public ICommand StopListeningCommand => _stopListeningCommand ??= new RelayCommand(StopListening);
 
     private ICommand? _navigateToSettingsCommand;
     public ICommand NavigateToSettingsCommand => _navigateToSettingsCommand ??= new AsyncRelayCommand(NavigateToSettingsAsync);
@@ -254,6 +248,7 @@ public class MainAssistantViewModel(
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
+            // Update the HUD metrics when thermal state changes in real-time
             _ = RefreshHudTelemetryAsync();
         });
     }
@@ -329,7 +324,12 @@ public class MainAssistantViewModel(
             }
             else
             {
-                StopListening();
+                StopMicrophoneService();
+                IsListening = false;
+                AiStatusText = "Ready";
+                StatusColor = "#9A9A9A";
+                TranscriptionStatusText = "STT STREAM IDLE";
+                StreamingTranscriptDisplay = "Awaiting voice stream...";
             }
         }
         catch (Exception ex)
@@ -347,9 +347,6 @@ public class MainAssistantViewModel(
 
     private void StopListening()
     {
-        if (!IsListening)
-            return;
-
         StopMicrophoneService();
         IsListening = false;
         AiStatusText = "Ready";
@@ -397,7 +394,7 @@ public class MainAssistantViewModel(
         AiStatusText = "Summarizing...";
         try
         {
-            var now = DateTime.Now;
+            var now = DateTime.UtcNow;
             var start = now.Date;
             var summary = await _logSummaryService.SummarizePeriodAsync(start, now);
             LastResponse = $"Summary saved: {summary.Date:yyyy-MM-dd}\n{summary.SummaryText}";
@@ -420,7 +417,7 @@ public class MainAssistantViewModel(
         AiStatusText = "Analyzing...";
         try
         {
-            var now = DateTime.Now;
+            var now = DateTime.UtcNow;
             var start = now.AddHours(-24);
             var result = await _activityAnalyzer.AnalyzeRecentPeriodAsync(start, now);
             if (result is null)
@@ -469,6 +466,7 @@ public class MainAssistantViewModel(
         {
             System.Diagnostics.Debug.WriteLine($"Failed to generate assistant ring: {ex.Message}");
             AssistantImageSource = "dotnet_bot.png";
+            // Non-blocking log only during device testing to avoid modal alert issues via ADB
             global::Android.Util.Log.Warn("QuantumZ", $"Asset generation skipped: {ex.Message}");
         }
 
@@ -595,7 +593,6 @@ public class MainAssistantViewModel(
             global::Android.Util.Log.Info("QuantumZ", "Starting MicrophoneForegroundService from UI.");
             var context = global::Android.App.Application.Context;
             var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
-            intent.SetAction(global::QuantumZ.Android.Services.MicrophoneForegroundService.ActionStartListening);
             if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.O)
             {
                 context.StartForegroundService(intent);
@@ -618,15 +615,7 @@ public class MainAssistantViewModel(
         global::Android.Util.Log.Info("QuantumZ", "Stopping MicrophoneForegroundService from UI.");
         var context = global::Android.App.Application.Context;
         var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
-        intent.SetAction(global::QuantumZ.Android.Services.MicrophoneForegroundService.ActionStopListening);
-        if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.O)
-        {
-            context.StartForegroundService(intent);
-        }
-        else
-        {
-            context.StartService(intent);
-        }
+        context.StopService(intent);
 #endif
     }
 
@@ -637,7 +626,7 @@ public class MainAssistantViewModel(
 #if ANDROID
             var context = global::Android.App.Application.Context;
             var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
-            intent.SetAction(global::QuantumZ.Android.Services.MicrophoneForegroundService.ActionTestUtterance);
+            intent.SetAction("com.quantumz.assistant.TEST_UTTERANCE");
             intent.PutExtra("utterance", "hey quantum what is the current time");
             if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.O)
             {
@@ -655,8 +644,6 @@ public class MainAssistantViewModel(
             System.Diagnostics.Debug.WriteLine($"Test pipeline failed: {ex}");
             AiStatusText = "Test failed";
         }
-
-        await Task.CompletedTask;
     }
 }
 
