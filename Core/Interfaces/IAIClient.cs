@@ -55,7 +55,19 @@ public record ChatMessage(
 }
 
 public record ToolCall(
-    string Id,
-    string Name,
-    string ArgumentsJson
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonIgnore] string Name,
+    [property: JsonIgnore] string ArgumentsJson
+)
+{
+    [JsonPropertyName("type")]
+    public string Type => "function";
+
+    [JsonPropertyName("function")]
+    public ToolCallFunction Function => new(Name, ArgumentsJson);
+}
+
+public record ToolCallFunction(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("arguments")] string Arguments
 );
