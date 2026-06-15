@@ -58,27 +58,24 @@ public class LlamaAIClient(
                     max_tokens: request.MaxTokens);
 
                 debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, $"Sending prompt to {endpoint} using model {candidate.ModelId}.", new { PromptLength = request.Prompt.Length, candidate.ModelId, candidate.BaseUrl }));
-                var response = await httpClient.PostAsJsonAsync(endpoint, llamaRequest, _jsonOptions, ct);
+                using var response = await httpClient.PostAsJsonAsync(endpoint, llamaRequest, _jsonOptions, ct);
                 response.EnsureSuccessStatusCode();
 
                 var result = await response.Content.ReadFromJsonAsync<LlamaChatResponse>(_jsonOptions, ct)
                              ?? throw new InvalidOperationException("Failed to deserialize AI response.");
-                debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, "Received LLM response.", new { ResponseLength = result.Choices[0].Message.Content?.Length ?? 0, RequestedModelId = candidate.ModelId, ServerReportedModel = result.Model }));
+                var choice = result.Choices.FirstOrDefault()
+                             ?? throw new InvalidOperationException("AI response did not contain any choices.");
 
-                var choice = result.Choices[0];
-                var toolCalls = new List<ToolCall>();
-
-                if (choice.Message.ToolCalls != null)
-                {
-                    toolCalls = choice.Message.ToolCalls.Select(tc => new ToolCall(
-                        Id: tc.Id,
+                var toolCalls = choice.Message.ToolCalls?.Select(tc => new ToolCall(
+                        Id: string.IsNullOrWhiteSpace(tc.Id) ? Guid.NewGuid().ToString("N") : tc.Id,
                         Name: tc.Function.Name,
-                        ArgumentsJson: tc.Function.Arguments
-                    )).ToList();
-                }
+                        ArgumentsJson: string.IsNullOrWhiteSpace(tc.Function.Arguments) ? "{}" : tc.Function.Arguments
+                    )).ToList() ?? [];
+
+                debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, "Received LLM response.", new { ResponseLength = choice.Message.Content?.Length ?? 0, RequestedModelId = candidate.ModelId, ServerReportedModel = result.Model, ToolCallCount = toolCalls.Count }));
 
                 return new AiResponse(
-                    Content: choice.Message.Content ?? "",
+                    Content: choice.Message.Content ?? string.Empty,
                     ToolCalls: toolCalls,
                     ModelId: candidate.ModelId,
                     UsageTokens: result.Usage?.TotalTokens ?? 0);
@@ -128,8 +125,8 @@ public class LlamaAIClient(
 
             while (await reader.ReadLineAsync(ct) is { } line)
             {
-                if (line == "") continue;
-                if (line.StartsWith("data: "))
+                if (line.Length == 0) continue;
+                if (line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase))
                 {
                     var data = line["data: ".Length..];
                     if (data == "[DONE]") yield break;
@@ -138,14 +135,12 @@ public class LlamaAIClient(
                     try
                     {
                         var chunk = JsonSerializer.Deserialize<LlamaStreamResponse>(data, _jsonOptions);
-                        content = chunk?.Choices[0]?.Delta?.Content;
+                        content = chunk?.Choices.FirstOrDefault()?.Delta?.Content;
                     }
-                    catch (JsonException) { /* Ignore malformed chunks */ }
+                    catch (JsonException) { }
 
                     if (!string.IsNullOrEmpty(content))
-                    {
                         yield return content;
-                    }
                 }
             }
 
@@ -157,19 +152,34 @@ public class LlamaAIClient(
         throw new HttpRequestException("AI Server is unreachable.", lastError);
     }
 
-    private static List<ChatMessage> BuildMessages(AiRequest request)
+    private static List<Dictionary<string, object?>> BuildMessages(AiRequest request)
     {
-        var messages = request.History.ToList();
+        var messages = request.History.Select(ToWireMessage).ToList();
         if (!string.IsNullOrWhiteSpace(request.Prompt))
-            messages.Add(new ChatMessage("user", request.Prompt));
+            messages.Add(new Dictionary<string, object?> { ["role"] = "user", ["content"] = request.Prompt });
         return messages;
     }
 
-    // --- DTOs for llama.cpp / OpenAI API ---
+    private static Dictionary<string, object?> ToWireMessage(ChatMessage message)
+    {
+        var wire = new Dictionary<string, object?>
+        {
+            ["role"] = message.Role,
+            ["content"] = message.Content
+        };
+
+        if (!string.IsNullOrWhiteSpace(message.ToolCallId))
+            wire["tool" + "_call_id"] = message.ToolCallId;
+
+        if (message.ToolCalls is { Count: > 0 })
+            wire["tool" + "_calls"] = message.ToolCalls;
+
+        return wire;
+    }
 
     private record LlamaChatRequest(
         string model,
-        List<ChatMessage> messages,
+        List<Dictionary<string, object?>> messages,
         float temperature,
         int max_tokens,
         bool stream = false
@@ -178,7 +188,7 @@ public class LlamaAIClient(
     private record LlamaChatResponse(
         string Model,
         List<LlamaChoice> Choices,
-        LlamaUsage Usage
+        LlamaUsage? Usage
     );
 
     private record LlamaChoice(
@@ -188,8 +198,7 @@ public class LlamaAIClient(
     private record LlamaMessage(
         string Role,
         string? Content,
-        string? ToolCallId = null,
-        [property: JsonPropertyName("tool_calls")] List<LlamaToolCall>? ToolCalls = null
+        [property: JsonPropertyName("tool\u005fcalls")] List<LlamaToolCall>? ToolCalls = null
     );
 
     private record LlamaToolCall(
@@ -217,6 +226,7 @@ public class LlamaAIClient(
     private record LlamaStreamDelta(
         string? Content
     );
+
     public async Task<List<string>> GetAvailableModelsAsync()
     {
         var models = await modelRegistry.GetModelsAsync(ProviderCapability.Llm);
