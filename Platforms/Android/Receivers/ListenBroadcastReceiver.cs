@@ -5,7 +5,7 @@ using QuantumZ.Android.Services;
 
 namespace QuantumZ.Android.Receivers;
 
-[BroadcastReceiver(Exported = true)]
+[BroadcastReceiver(Exported = false)]
 [IntentFilter(new[] { "com.quantumz.assistant.START_LISTENING", "com.quantumz.assistant.TEST_UTTERANCE" })]
 public class ListenBroadcastReceiver : BroadcastReceiver
 {
