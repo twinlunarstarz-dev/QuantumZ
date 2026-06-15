@@ -9,7 +9,7 @@ using QuantumZ.Infrastructure.Utilities;
 namespace QuantumZ.Infrastructure.Services;
 
 /// <summary>
-/// Remote STT engine using an OpenAI-compatible audio/transcriptions endpoint on llama.cpp.
+/// Remote STT engine using an OpenAI-compatible audio/transcriptions endpoint.
 /// </summary>
 public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService settings, IDebugLogger debugLogger) : ISttEngine, ISttProvider
 {
@@ -40,7 +40,7 @@ public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService sett
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(2));
-            var response = await httpClient.GetAsync($"{settings.SttUrl.TrimEnd('/')}/models", timeoutCts.Token);
+            using var response = await httpClient.GetAsync(BuildEndpoint(settings.SttUrl, "models"), timeoutCts.Token);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
@@ -64,20 +64,18 @@ public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService sett
         if (!IsReady)
             throw new InvalidOperationException("STT server URL is not configured for remote STT.");
 
-        var endpoint = $"{settings.SttUrl.TrimEnd('/')}/audio/transcriptions";
-
-        // Wrap raw PCM in a valid WAV header so the endpoint can parse it correctly.
+        var endpoint = BuildEndpoint(settings.SttUrl, "audio/transcriptions");
         var wavBytes = PcmToWavConverter.Convert(SampleRate, Channels, pcm16Audio);
 
         using var content = new MultipartFormDataContent();
-        content.Add(new StringContent(settings.SttModelId), "model");
+        content.Add(new StringContent(FirstNonEmpty(settings.SttModelId, "whisper-base")!), "model");
         content.Add(new StreamContent(new MemoryStream(wavBytes))
         {
             Headers = { ContentType = new MediaTypeHeaderValue("audio/wav") }
         }, "file", "audio.wav");
 
-        debugLogger.LogEvent(new DebugEvent(DateTime.Now, "STT", LogLevel.Info, "Sending audio for transcription...", new { Bytes = pcm16Audio.Length, settings.SttModelId }));
-        var response = await httpClient.PostAsync(endpoint, content, ct);
+        debugLogger.LogEvent(new DebugEvent(DateTime.Now, "STT", LogLevel.Info, "Sending audio for transcription...", new { Bytes = pcm16Audio.Length, settings.SttModelId, Endpoint = endpoint }));
+        using var response = await httpClient.PostAsync(endpoint, content, ct);
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<TranscriptionResponse>(_jsonOptions, ct);
@@ -86,6 +84,22 @@ public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService sett
         debugLogger.LogEvent(new DebugEvent(DateTime.Now, "STT", LogLevel.Info, $"Transcribed text: {text}", new { TextLength = text.Length }));
         return text;
     }
+
+    private static string NormalizeOpenAiBaseUrl(string? url)
+    {
+        var normalized = url?.Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
+
+        return normalized.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : $"{normalized}/v1";
+    }
+
+    private static string BuildEndpoint(string baseUrl, string path) =>
+        $"{NormalizeOpenAiBaseUrl(baseUrl).TrimEnd('/')}/{path.TrimStart('/')}";
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
     private record TranscriptionResponse(string Text);
 }
