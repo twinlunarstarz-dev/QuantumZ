@@ -22,7 +22,7 @@
              android:exported="false" />
 
     <receiver android:name="QuantumZ.Android.Receivers.ListenBroadcastReceiver"
-              android:exported="true">
+              android:exported="false">
         <intent-filter>
             <action android:name="com.quantumz.assistant.START_LISTENING" />
             <action android:name="com.quantumz.assistant.TEST_UTTERANCE" />
