@@ -1,6 +1,5 @@
 using Android;
 using Android.App;
-using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using AndroidX.Core.App;
@@ -26,22 +25,20 @@ public class MainActivity : MauiAppCompatActivity
         if (ContextCompat.CheckSelfPermission(this, Manifest.Permission.RecordAudio) != Permission.Granted)
             permissions.Add(Manifest.Permission.RecordAudio);
 
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu &&
+            ContextCompat.CheckSelfPermission(this, Manifest.Permission.PostNotifications) != Permission.Granted)
         {
-            if (ContextCompat.CheckSelfPermission(this, Manifest.Permission.PostNotifications) != Permission.Granted)
-                permissions.Add(Manifest.Permission.PostNotifications);
+            permissions.Add(Manifest.Permission.PostNotifications);
         }
 
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.S)
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.S &&
+            ContextCompat.CheckSelfPermission(this, Manifest.Permission.BluetoothConnect) != Permission.Granted)
         {
-            if (ContextCompat.CheckSelfPermission(this, Manifest.Permission.BluetoothConnect) != Permission.Granted)
-                permissions.Add(Manifest.Permission.BluetoothConnect);
+            permissions.Add(Manifest.Permission.BluetoothConnect);
         }
 
         if (permissions.Count > 0)
-        {
             ActivityCompat.RequestPermissions(this, permissions.ToArray(), RequestPermissionsCode);
-        }
     }
 
     public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
@@ -52,7 +49,7 @@ public class MainActivity : MauiAppCompatActivity
 
         for (var i = 0; i < permissions.Length; i++)
         {
-            var granted = grantResults[i] == Permission.Granted;
+            var granted = i < grantResults.Length && grantResults[i] == Permission.Granted;
             global::Android.Util.Log.Info("QuantumZ", $"Permission {permissions[i]}: {(granted ? "GRANTED" : "DENIED")}");
         }
     }
