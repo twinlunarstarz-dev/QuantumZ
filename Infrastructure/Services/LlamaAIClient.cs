@@ -53,7 +53,7 @@ public class LlamaAIClient(
                 var endpoint = BuildEndpoint(candidate.BaseUrl, "chat/completions");
                 var llamaRequest = new LlamaChatRequest(
                     model: candidate.ModelId,
-                    messages: request.History.Concat([new ChatMessage("user", request.Prompt)]).ToList(),
+                    messages: BuildMessages(request),
                     temperature: request.Temperature,
                     max_tokens: request.MaxTokens);
 
@@ -68,9 +68,9 @@ public class LlamaAIClient(
                 var choice = result.Choices[0];
                 var toolCalls = new List<ToolCall>();
 
-                if (choice.ToolCalls != null)
+                if (choice.Message.ToolCalls != null)
                 {
-                    toolCalls = choice.ToolCalls.Select(tc => new ToolCall(
+                    toolCalls = choice.Message.ToolCalls.Select(tc => new ToolCall(
                         Id: tc.Id,
                         Name: tc.Function.Name,
                         ArgumentsJson: tc.Function.Arguments
@@ -104,7 +104,7 @@ public class LlamaAIClient(
             var endpoint = BuildEndpoint(candidate.BaseUrl, "chat/completions");
             var llamaRequest = new LlamaChatRequest(
                 model: candidate.ModelId,
-                messages: request.History.Concat([new ChatMessage("user", request.Prompt)]).ToList(),
+                messages: BuildMessages(request),
                 temperature: request.Temperature,
                 max_tokens: request.MaxTokens,
                 stream: true);
@@ -157,6 +157,14 @@ public class LlamaAIClient(
         throw new HttpRequestException("AI Server is unreachable.", lastError);
     }
 
+    private static List<ChatMessage> BuildMessages(AiRequest request)
+    {
+        var messages = request.History.ToList();
+        if (!string.IsNullOrWhiteSpace(request.Prompt))
+            messages.Add(new ChatMessage("user", request.Prompt));
+        return messages;
+    }
+
     // --- DTOs for llama.cpp / OpenAI API ---
 
     private record LlamaChatRequest(
@@ -174,14 +182,14 @@ public class LlamaAIClient(
     );
 
     private record LlamaChoice(
-        LlamaMessage Message,
-        List<LlamaToolCall>? ToolCalls
+        LlamaMessage Message
     );
 
     private record LlamaMessage(
         string Role,
         string? Content,
-        string? ToolCallId = null
+        string? ToolCallId = null,
+        [property: JsonPropertyName("tool_calls")] List<LlamaToolCall>? ToolCalls = null
     );
 
     private record LlamaToolCall(
@@ -195,7 +203,7 @@ public class LlamaAIClient(
     );
 
     private record LlamaUsage(
-        long TotalTokens
+        [property: JsonPropertyName("total_tokens")] long TotalTokens
     );
 
     private record LlamaStreamResponse(
@@ -226,7 +234,7 @@ public class LlamaAIClient(
     }
 
     private static string BuildEndpoint(string baseUrl, string path) =>
-        $"{baseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
+        $"{NormalizeOpenAiBaseUrl(baseUrl).TrimEnd('/')}/{path.TrimStart('/')}";
 
     private async IAsyncEnumerable<LlmExecutionCandidate> GetExecutionCandidatesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
@@ -238,13 +246,14 @@ public class LlamaAIClient(
         if (!string.IsNullOrWhiteSpace(preferred) && !string.IsNullOrWhiteSpace(configuredBaseUrl))
             candidates.Add(new LlmExecutionCandidate(configuredBaseUrl, preferred));
 
-        if (registryModel is { Endpoint: not null })
-            candidates.Add(new LlmExecutionCandidate(registryModel.Endpoint, registryModel.Id));
+        var registryEndpoint = NormalizeOpenAiBaseUrl(registryModel?.Endpoint);
+        if (registryModel is not null && !string.IsNullOrWhiteSpace(registryEndpoint))
+            candidates.Add(new LlmExecutionCandidate(registryEndpoint, registryModel.Id));
 
         var configuredModel = FirstNonEmpty(preferred, registryModel?.Id);
         if (!string.IsNullOrWhiteSpace(configuredModel))
         {
-            if (!string.Equals(configuredBaseUrl, LocalBaseUrl, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(configuredBaseUrl) && !string.Equals(configuredBaseUrl, LocalBaseUrl, StringComparison.OrdinalIgnoreCase))
                 candidates.Add(new LlmExecutionCandidate(configuredBaseUrl, configuredModel));
 
             candidates.Add(new LlmExecutionCandidate(RemoteFallbackBaseUrl, configuredModel));
@@ -274,7 +283,7 @@ public class LlamaAIClient(
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(2));
-            var response = await httpClient.GetAsync(BuildEndpoint(baseUrl, "models"), cts.Token);
+            using var response = await httpClient.GetAsync(BuildEndpoint(baseUrl, "models"), cts.Token);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
