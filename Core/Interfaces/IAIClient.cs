@@ -46,8 +46,12 @@ public record AiResponse(
 public record ChatMessage(
     string Role, // "system", "user", "assistant", "tool"
     string Content,
-    string? ToolCallId = null
-);
+    string? ToolCallId = null,
+    List<ToolCall>? ToolCalls = null
+)
+{
+    public List<ToolCall> ToolCalls { get; init; } = ToolCalls ?? [];
+}
 
 public record ToolCall(
     string Id,
