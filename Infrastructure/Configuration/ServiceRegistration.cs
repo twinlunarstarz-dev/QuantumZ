@@ -37,7 +37,7 @@ public static class ServiceRegistration
         services.AddSingleton<IProviderRouter, ProviderRouter>();
 
         // AI Integration Core
-        services.AddSingleton<AIIntegrationService>();
+        services.AddSingleton<IAIIntegrationService, AIIntegrationService>();
         services.AddSingleton<ActivityAnalyzerService>();
 
         // Visualizer & Speech State

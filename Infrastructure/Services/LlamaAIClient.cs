@@ -15,7 +15,6 @@ public class LlamaAIClient(
     IModelRegistry modelRegistry,
     IMcpOrchestrator mcpOrchestrator) : IAIClient, ILlmProvider
 {
-    private const string RemoteFallbackBaseUrl = ModelRegistry.RemoteLlamaBaseUrl;
     private const string LocalBaseUrl = ModelRegistry.LocalLlamaBaseUrl;
 
     private readonly JsonSerializerOptions _jsonOptions = new()
@@ -173,11 +172,20 @@ public class LlamaAIClient(
         return request;
     }
 
-    private static List<Dictionary<string, object?>> BuildMessages(AiRequest request)
+    private List<Dictionary<string, object?>> BuildMessages(AiRequest request)
     {
-        var messages = request.History.Select(ToWireMessage).ToList();
+        var messages = new List<Dictionary<string, object?>>();
+
+        if (!string.IsNullOrWhiteSpace(settings.GlobalSettings.CustomSystemMessage))
+        {
+            messages.Add(new Dictionary<string, object?> { ["role"] = "system", ["content"] = settings.GlobalSettings.CustomSystemMessage });
+        }
+
+        messages.AddRange(request.History.Select(ToWireMessage));
+
         if (!string.IsNullOrWhiteSpace(request.Prompt))
             messages.Add(new Dictionary<string, object?> { ["role"] = "user", ["content"] = request.Prompt });
+
         return messages;
     }
 
@@ -331,7 +339,6 @@ public class LlamaAIClient(
             if (!string.IsNullOrWhiteSpace(configuredBaseUrl) && !string.Equals(configuredBaseUrl, LocalBaseUrl, StringComparison.OrdinalIgnoreCase))
                 candidates.Add(new LlmExecutionCandidate(configuredBaseUrl, configuredModel));
 
-            candidates.Add(new LlmExecutionCandidate(RemoteFallbackBaseUrl, configuredModel));
             candidates.Add(new LlmExecutionCandidate(LocalBaseUrl, configuredModel));
         }
 

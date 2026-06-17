@@ -3,6 +3,7 @@
 # Build results
 [Bb]in/
 [Oo]bj/
+[Tt]emp
 
 # Visual Studio files
 .vs/
@@ -40,3 +41,6 @@ Tls*
 secrets.json
 appsettings.Development.json
 **/user.config
+
+# Debug Specific
+*.log

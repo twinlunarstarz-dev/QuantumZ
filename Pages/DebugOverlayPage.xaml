@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:vm="clr-namespace:QuantumZ.ViewModels"
-             x:Class="QuantumZ.Pages.DebugOverlayPage"
+             xmlns:vm="clr-namespace:QuantumZ.UI.ViewModels"
+             x:Class="QuantumZ.UI.Pages.DebugOverlayPage"
              Title="System Debug Log"
              BackgroundColor="#1A1A1A">
 
@@ -19,6 +19,9 @@
                    Text="{Binding FilterText}" 
                    TextColor="White" 
                    PlaceholderColor="Gray" />
+            <Label Text="{Binding StatusMessage}"
+                   TextColor="#00FF88"
+                   FontSize="12" />
         </VerticalStackLayout>
 
         <!-- Log List -->
@@ -57,6 +60,14 @@
             <Button Text="Clear Logs" 
                     Command="{Binding ClearLogs}" 
                     BackgroundColor="#333" 
+                    TextColor="White" />
+            <Button Text="Copy All"
+                    Command="{Binding CopyLogsCommand}"
+                    BackgroundColor="#333"
+                    TextColor="White" />
+            <Button Text="Export"
+                    Command="{Binding ShareLogsCommand}"
+                    BackgroundColor="#333"
                     TextColor="White" />
         </HorizontalStackLayout>
     </Grid>

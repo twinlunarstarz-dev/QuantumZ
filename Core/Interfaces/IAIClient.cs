@@ -47,10 +47,14 @@ public record AiResponse(
 public record ChatMessage(
     string Role, // "system", "user", "assistant", "tool"
     string Content,
-    [property: JsonPropertyName("tool\u005fcall\u005fid")] string? ToolCallId = null,
-    [property: JsonPropertyName("tool\u005fcalls")] List<ToolCall>? ToolCalls = null
+    string? ToolCallId = null,
+    List<ToolCall>? ToolCalls = null
 )
 {
+    [JsonPropertyName("tool\u005fcall\u005fid")]
+    public string? ToolCallId { get; init; } = ToolCallId;
+
+    [JsonPropertyName("tool\u005fcalls")]
     public List<ToolCall> ToolCalls { get; init; } = ToolCalls ?? [];
 }
 

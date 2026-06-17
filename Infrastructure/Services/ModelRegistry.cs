@@ -16,7 +16,6 @@ public sealed class ModelRegistry(
     IDebugLogger debugLogger,
     ILlamaLocalManager llamaLocalManager) : IModelRegistry
 {
-    public const string RemoteLlamaBaseUrl = "http://100.117.207.123:8025/v1";
     public const string LocalLlamaBaseUrl = "http://localhost:8025/v1";
 
     private static readonly string[] LlmExtensions = [".gguf", ".bin", ".safetensors"];
@@ -153,7 +152,7 @@ public sealed class ModelRegistry(
         if (string.IsNullOrWhiteSpace(normalizedBaseUrl))
             return [];
 
-        if (location == ProviderLocation.Local && !await llamaLocalManager.EnsureServerRunningAsync())
+        if (location == ProviderLocation.Local && !await llamaLocalManager.CheckHealthAsync(ct))
             return [];
 
         try
@@ -212,7 +211,6 @@ public sealed class ModelRegistry(
         var endpoints = new List<(string BaseUrl, ProviderLocation Location, string Provider)>
         {
             (settings.LlmUrl, ProviderLocation.Remote, "openai-compatible"),
-            (RemoteLlamaBaseUrl, ProviderLocation.Remote, "llama.cpp"),
             (LocalLlamaBaseUrl, ProviderLocation.Local, "llama.cpp")
         };
 

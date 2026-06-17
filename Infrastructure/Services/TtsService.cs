@@ -73,7 +73,7 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            global::Android.Util.Log.Error("QuantumZ", $"TTS Synthesis failed: {ex}");
+            System.Diagnostics.Debug.WriteLine($"QuantumZ: TTS Synthesis failed: {ex}");
             debugLogger.Log("TTS", $"Synthesis Error: {ex.Message}", LogLevel.Error);
             throw;
         }

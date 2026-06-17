@@ -53,7 +53,25 @@ public sealed class DebugLoggerService(IAudioVisualizer audioVisualizer, ISpeech
         if (_disposed)
             return;
 
-        global::Android.Util.Log.Info("QuantumZ", $"{@event.Component}: {@event.Level}: {@event.Message}");
+        System.Diagnostics.Debug.WriteLine($"QuantumZ: {@event.Component}: {@event.Level}: {@event.Message}");
+#if ANDROID
+        var androidMessage = $"{@event.Component}: {@event.Level}: {@event.Message}";
+        switch (@event.Level)
+        {
+            case LogLevel.Error:
+                global::Android.Util.Log.Error("QuantumZ", androidMessage);
+                break;
+            case LogLevel.Warning:
+                global::Android.Util.Log.Warn("QuantumZ", androidMessage);
+                break;
+            case LogLevel.Trace:
+                global::Android.Util.Log.Debug("QuantumZ", androidMessage);
+                break;
+            default:
+                global::Android.Util.Log.Info("QuantumZ", androidMessage);
+                break;
+        }
+#endif
 
         EnsurePipelineStateSubscriptions();
         _pendingEvents.Enqueue(@event);
@@ -153,7 +171,7 @@ public sealed class DebugLoggerService(IAudioVisualizer audioVisualizer, ISpeech
             }
             catch (Exception ex)
             {
-                global::Android.Util.Log.Warn("QuantumZ", $"Debug event subscriber failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"QuantumZ: Debug event subscriber failed: {ex.Message}");
             }
         }
     }

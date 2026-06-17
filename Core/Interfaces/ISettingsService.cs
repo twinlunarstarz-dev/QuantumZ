@@ -5,10 +5,16 @@ namespace QuantumZ.Core.Interfaces;
 public interface ISettingsService
 {
     // AI Core Settings
-    string LlmUrl { get; set; }
-    string VadUrl { get; set; }
-    string SttUrl { get; set; }
-    string TtsUrl { get; set; }
+    ServiceProviderSettings LlmSettings { get; set; }
+    ServiceProviderSettings VadSettings { get; set; }
+    ServiceProviderSettings SttSettings { get; set; }
+    ServiceProviderSettings TtsSettings { get; set; }
+
+    // Compatibility Properties for existing services (Proxy to active providers)
+    string LlmUrl { get; }
+    string VadUrl { get; }
+    string SttUrl { get; }
+    string TtsUrl { get; }
     string LlamaModelId { get; set; }
     string SelectedModelName { get; set; }
     string SttModelId { get; set; }
@@ -33,6 +39,8 @@ public interface ISettingsService
 
     // UI Settings
     bool ShowAdvancedNetworkSettings { get; set; }
+
+    GlobalAssistantSettings GlobalSettings { get; set; }
 
     // Obsidian Memory
     string ObsidianVaultPath { get; set; }

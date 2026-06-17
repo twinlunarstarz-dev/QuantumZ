@@ -15,7 +15,6 @@ using Microsoft.Extensions.DependencyInjection;
 using QuantumZ.Core.Interfaces;
 using QuantumZ.Core.Models;
 using DebugLogLevel = QuantumZ.Core.Models.LogLevel;
-using QuantumZ.Infrastructure.Services;
 using QuantumZ.Android.Audio;
 
 namespace QuantumZ.Android.Services;
@@ -30,10 +29,11 @@ public class MicrophoneForegroundService : Service
     private const int SilenceThresholdMs = 1200;
     private const int InterimTranscriptionIntervalMs = 2500;
     private const int MinInterimTranscriptionMs = 1600;
+    private const int WakeCommandWindowSeconds = 12;
 
     private ITtsEngine? _ttsEngine;
     private IProviderRouter? _providerRouter;
-    private AIIntegrationService? _aiIntegration;
+    private IAIIntegrationService? _aiIntegration;
     private IActivityLogger? _activityLogger;
     private ISettingsService? _settings;
     private IMemoryService? _memoryService;
@@ -45,14 +45,16 @@ public class MicrophoneForegroundService : Service
     private OnDeviceSpeechRecognizer? _nativeRecognizer;
     private CancellationTokenSource? _cts;
     private Task? _captureTask;
+    private readonly SemaphoreSlim _assistantPipelineGate = new(1, 1);
+    private DateTimeOffset _wakeCommandArmedUntil = DateTimeOffset.MinValue;
     private int _interimTranscriptionActive;
 
     public override void OnCreate()
     {
         base.OnCreate();
         global::Android.Util.Log.Info("QuantumZ", "MicrophoneForegroundService OnCreate.");
-        _debugLogger?.Log("MicService", "OnCreate called");
         InitializeDependencies();
+        _debugLogger?.Log("MicService", "OnCreate called");
     }
 
     private void InitializeDependencies()
@@ -63,7 +65,7 @@ public class MicrophoneForegroundService : Service
                 ?? throw new InvalidOperationException("MAUI service provider unavailable.");
 
             _settings = services.GetRequiredService<ISettingsService>();
-            _aiIntegration = services.GetRequiredService<AIIntegrationService>();
+            _aiIntegration = services.GetRequiredService<IAIIntegrationService>();
             _activityLogger = services.GetRequiredService<IActivityLogger>();
             _memoryService = services.GetRequiredService<IMemoryService>();
             _audioVisualizer = services.GetService<IAudioVisualizer>();
@@ -75,7 +77,7 @@ public class MicrophoneForegroundService : Service
 
             if (_settings.UseOnDeviceStt)
             {
-                _nativeRecognizer = new OnDeviceSpeechRecognizer(this, OnNativeResult);
+                _nativeRecognizer = new OnDeviceSpeechRecognizer(this, OnNativeResult, OnNativePartialResult);
             }
             _routingManager = new AudioRoutingManager(this, _settings);
             _routingManager.Initialize();
@@ -142,6 +144,12 @@ public class MicrophoneForegroundService : Service
 
     private void StartNativeSpeechRecognizer()
     {
+        if (_cts?.IsCancellationRequested == false)
+        {
+            _debugLogger?.Log("MicService", "Native speech recognizer is already running; start request ignored.");
+            return;
+        }
+
         if (_nativeRecognizer == null)
         {
             global::Android.Util.Log.Error("QuantumZ", "Native recognizer not initialized.");
@@ -152,6 +160,13 @@ public class MicrophoneForegroundService : Service
         _audioVisualizer?.ReportState(ListeningState.Listening);
         global::Android.Util.Log.Info("QuantumZ", "Native speech recognizer started.");
         _debugLogger?.Log("MicService", "Native speech recognizer started");
+    }
+
+    private void OnNativePartialResult(string text)
+    {
+        if (_cts?.IsCancellationRequested != false || string.IsNullOrWhiteSpace(text)) return;
+        _speechState?.UpdateTranscription(text);
+        _debugLogger?.Log("MicService", $"Native STT partial: {text}", DebugLogLevel.Trace);
     }
 
     private void OnNativeResult(string text)
@@ -202,6 +217,12 @@ public class MicrophoneForegroundService : Service
                 _debugLogger?.Log("MicService", "Audio capture loop started");
                 _audioVisualizer?.ReportState(ListeningState.Listening);
 
+                // Pre-roll buffering: keep a rolling window of audio before speech starts
+                double preRollSeconds = _settings!.GlobalSettings.PreRollSeconds;
+                int preRollBufferSize = (int)(preRollSeconds * SampleRate * BytesPerSample);
+                var preRollBuffer = new byte[preRollBufferSize];
+                int preRollWritePos = 0;
+
                 var rollingBuffer = new MemoryStream();
                 var silenceSamples = 0;
                 var isSpeaking = false;
@@ -226,6 +247,24 @@ public class MicrophoneForegroundService : Service
                         _debugLogger?.Log("MicService", "Recording verification: Buffer contains only zeros.");
                         // We don't necessarily stop, but we can track if this persists.
                     }
+                    // Update rolling pre-roll buffer regardless of VAD state to ensure we always have the last N seconds
+                    int bytesToCopy = Math.Min(read, preRollBufferSize);
+                    int spaceLeft = preRollBufferSize - preRollWritePos;
+
+                    if (bytesToCopy <= spaceLeft)
+                    {
+                        Buffer.BlockCopy(buffer, 0, preRollBuffer, preRollWritePos, bytesToCopy);
+                        preRollWritePos += bytesToCopy;
+                    }
+                    else
+                    {
+                        // Wrap around: fill the end then start from beginning
+                        Buffer.BlockCopy(buffer, 0, preRollBuffer, preRollWritePos, spaceLeft);
+                        int remaining = bytesToCopy - spaceLeft;
+                        Buffer.BlockCopy(buffer, spaceLeft, preRollBuffer, 0, remaining);
+                        preRollWritePos = remaining;
+                    }
+
                     var vadResult = await vadProvider.DetectSpeechAsync(buffer.AsMemory(0, read), SampleRate, _cts.Token);
                     var hasVoice = vadResult.IsSpeechDetected;
                     _audioVisualizer?.ReportAudioLevel(vadResult.Confidence);
@@ -243,6 +282,19 @@ public class MicrophoneForegroundService : Service
                             isSpeaking = true;
                             _debugLogger?.Log("MicService", $"VAD activity started (RMS: {vadResult.Rms:F4}, confidence: {vadResult.Confidence:F2})");
                             rollingBuffer.SetLength(0);
+
+                            // Prepend pre-roll audio to the utterance buffer
+                            if (preRollWritePos > 0)
+                            {
+                                // Reconstruct linear buffer from circular pre-roll buffer
+                                var linearizedPreRoll = new byte[preRollBufferSize];
+                                int length = preRollBufferSize;
+
+                                Buffer.BlockCopy(preRollBuffer, preRollWritePos, linearizedPreRoll, 0, preRollBufferSize - preRollWritePos);
+                                Buffer.BlockCopy(preRollBuffer, 0, linearizedPreRoll, preRollBufferSize - preRollWritePos, preRollWritePos);
+
+                                rollingBuffer.Write(linearizedPreRoll, 0, length);
+                            }
                             silenceSamples = 0;
                             _speechState?.ClearTranscription();
                             _audioVisualizer?.ReportState(ListeningState.Listening);
@@ -416,44 +468,87 @@ public class MicrophoneForegroundService : Service
                 .ToArray();
             _debugLogger?.Log("MicService", $"Wake word match: {string.Join(", ", matchedWakeWords)}");
 
-            // Trigger Word Detected: Play the validation beep only after a wake word is matched.
-            PlayValidationBeep();
-
             var prompt = StripWakeWord(text, wakeWords);
             if (string.IsNullOrWhiteSpace(prompt))
-                prompt = "Respond briefly that QuantumZ is online and ready.";
+            {
+                _wakeCommandArmedUntil = DateTimeOffset.UtcNow.AddSeconds(WakeCommandWindowSeconds);
+                _speechState?.UpdateTranscription("QuantumZ awake. Listening for your command...");
+                global::Android.Util.Log.Info("QuantumZ", $"Wake word armed command window for {WakeCommandWindowSeconds}s.");
+                _debugLogger?.Log("MicService", $"Wake word matched without command; next transcript within {WakeCommandWindowSeconds}s will be treated as the command.");
+                await _activityLogger!.LogFragmentAsync($"[WAKE] {text}", "wake-word");
+                return;
+            }
 
+            await ExecuteAssistantPromptAsync(prompt, $"[WAKE] {text}", ct);
+            return;
+        }
+
+        if (DateTimeOffset.UtcNow <= _wakeCommandArmedUntil)
+        {
+            _debugLogger?.Log("MicService", "Processing transcript as wake-word follow-up command.");
+            await ExecuteAssistantPromptAsync(text, $"[WAKE-FOLLOWUP] {text}", ct);
+            return;
+        }
+
+        _debugLogger?.Log("MicService", "Wake word not matched; treating transcript as ambient activity");
+        if (_settings.EnableActivityLogging)
+        {
+            await _activityLogger!.LogFragmentAsync(text, "ambient");
+        }
+    }
+
+    private async Task ExecuteAssistantPromptAsync(string prompt, string userLogFragment, CancellationToken ct)
+    {
+        await _assistantPipelineGate.WaitAsync(ct);
+        try
+        {
+            global::Android.Util.Log.Info("QuantumZ", $"LLM request: {prompt}");
             _debugLogger?.Log("MicService", $"LLM request: {prompt}");
 
-            await _activityLogger!.LogFragmentAsync($"[WAKE] {text}", "user-command");
+            await _activityLogger!.LogFragmentAsync(userLogFragment, "user-command");
 
-            try
-            {
-                var aiResponseContent = await _aiIntegration!.ExecutePromptAsync(new AiRequest(prompt, MaxTokens: 512), ct);
-                var aiResponse = new AiResponse(aiResponseContent, null, null, 0); // Simplified for TTS compatibility
-                global::Android.Util.Log.Info("QuantumZ", $"LLM: {aiResponse.Content}");
-                _debugLogger?.Log("MicService", $"LLM response: {aiResponse.Content}");
-                await _activityLogger.LogFragmentAsync($"[RESPONSE] {aiResponse.Content}", "assistant-response");
+            var aiResponseContent = await _aiIntegration!.ExecutePromptAsync(new AiRequest(prompt, MaxTokens: 512), ct);
+            var aiResponse = new AiResponse(aiResponseContent, null, null, 0); // Simplified for TTS compatibility
+            global::Android.Util.Log.Info("QuantumZ", $"LLM: {aiResponse.Content}");
+            _debugLogger?.Log("MicService", $"LLM response: {aiResponse.Content}");
+            _speechState?.UpdateTranscription($"QuantumZ: {aiResponse.Content}");
+            await _activityLogger.LogFragmentAsync($"[RESPONSE] {aiResponse.Content}", "assistant-response");
 
-                _debugLogger?.Log("MicService", "TTS synthesis requested");
-                var ttsAudio = await _ttsEngine!.SynthesizeAsync(aiResponse.Content, ct);
-                _debugLogger?.Log("MicService", $"TTS synthesis completed ({ttsAudio.Length} bytes)");
-                await PlayTtsAudioAsync(ttsAudio, ct);
-            }
-                catch (Exception ex)
-                {
-                    global::Android.Util.Log.Error("QuantumZ", $"AI Pipeline failed: {ex}");
-                    _debugLogger?.Log("MicService", $"AI Pipeline Error: {ex.Message}", DebugLogLevel.Error);
-                    _dialogService?.ShowAlertAsync("Assistant Error", $"An error occurred while processing your request: {ex.Message}");
-                }
-            }
-        else
+            await TrySpeakResponseAsync(aiResponse.Content, ct);
+
+            // Re-arm the wake word window after a successful response to allow continuous conversation turns
+            _wakeCommandArmedUntil = DateTimeOffset.UtcNow.AddSeconds(WakeCommandWindowSeconds);
+            _debugLogger?.Log("MicService", $"Session extended: next follow-up command accepted until {_wakeCommandArmedUntil:HH:mm:ss}");
+        }
+        catch (Exception ex)
         {
-            _debugLogger?.Log("MicService", "Wake word not matched; treating transcript as ambient activity");
-            if (_settings.EnableActivityLogging)
-            {
-                await _activityLogger!.LogFragmentAsync(text, "ambient");
-            }
+            global::Android.Util.Log.Error("QuantumZ", $"AI Pipeline failed: {ex}");
+            _debugLogger?.Log("MicService", $"AI Pipeline Error: {ex.Message}", DebugLogLevel.Error);
+            _speechState?.UpdateTranscription($"Assistant error: {ex.Message}");
+            _dialogService?.ShowAlertAsync("Assistant Error", $"An error occurred while processing your request: {ex.Message}");
+        }
+        finally
+        {
+            _assistantPipelineGate.Release();
+        }
+    }
+
+    private async Task TrySpeakResponseAsync(string response, CancellationToken ct)
+    {
+        try
+        {
+            global::Android.Util.Log.Info("QuantumZ", "TTS synthesis requested");
+            _debugLogger?.Log("MicService", "TTS synthesis requested");
+            var ttsAudio = _providerRouter is not null
+                ? await _providerRouter.SynthesizeAsync(response, ct)
+                : await _ttsEngine!.SynthesizeAsync(response, ct);
+            _debugLogger?.Log("MicService", $"TTS synthesis completed ({ttsAudio.Length} bytes)");
+            await PlayTtsAudioAsync(ttsAudio, ct);
+        }
+        catch (Exception ex) when (ex is not System.OperationCanceledException)
+        {
+            global::Android.Util.Log.Error("QuantumZ", $"TTS failed after LLM response: {ex}");
+            _debugLogger?.Log("MicService", $"TTS Error after visible LLM response: {ex.Message}", DebugLogLevel.Error);
         }
     }
 
@@ -548,25 +643,6 @@ public class MicrophoneForegroundService : Service
         var channel = new NotificationChannel(ChannelId, "QuantumZ Audio Service", NotificationImportance.Low);
         var manager = (NotificationManager?)GetSystemService(NotificationService);
         manager?.CreateNotificationChannel(channel);
-    }
-
-    private void PlayValidationBeep()
-    {
-        try
-        {
-            var notificationUri = global::Android.Media.RingtoneManager.GetDefaultUri(global::Android.Media.RingtoneType.Notification);
-            if (notificationUri == null) return;
-
-            using var player = new MediaPlayer();
-            player.SetDataSource(this, notificationUri);
-            player.Prepare();
-            player.Start();
-            _debugLogger?.Log("MicService", "Played wake-word validation beep");
-        }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Error("QuantumZ", $"Failed to play validation beep: {ex}");
-        }
     }
 
     public override void OnDestroy()

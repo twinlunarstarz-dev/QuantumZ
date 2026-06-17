@@ -7,15 +7,22 @@ namespace QuantumZ.Infrastructure.Services;
 
 public sealed class SettingsService : ISettingsService
 {
-    private const string LlmUrlKey = "llm_server_url";
-    private const string SttUrlKey = "stt_server_url";
-    private const string VadUrlKey = "vad_server_url";
-    private const string TtsUrlKey = "tts_server_url";
-    private const string LegacyLlamaServerUrlKey = "llama_server_url";
     private const string LlamaModelIdKey = "llama_model_id";
     private const string SelectedModelNameKey = "selected_model_name";
     private const string SttModelIdKey = "stt_model_id";
     private const string TtsModelIdKey = "tts_model_id";
+
+    private const string LlmSettingsFile = "llm_settings.json";
+    private const string VadSettingsFile = "vad_settings.json";
+    private const string SttSettingsFile = "stt_settings.json";
+    private const string TtsSettingsFile = "tts_settings.json";
+
+    // Legacy keys for migration
+    private const string LlmUrlKeyLegacy = "llm_server_url";
+    private const string SttUrlKeyLegacy = "stt_server_url";
+    private const string VadUrlKeyLegacy = "vad_server_url";
+    private const string TtsUrlKeyLegacy = "tts_server_url";
+    private const string LegacyLlamaServerUrlKey = "llama_server_url";
     private const string AudioRoutingKey = "audio_routing";
     private const string LoggingIntervalKey = "logging_interval";
     private const string EnableActivityLoggingKey = "enable_activity_logging";
@@ -32,87 +39,56 @@ public sealed class SettingsService : ISettingsService
     private const string TtsModelIdDefault = "tts-default";
 
     private const string McpServersFile = "mcp_servers.json";
+    private const string GlobalSettingsFile = "global_settings.json";
     private const string WakeWordsFile = "wake_words.json";
     private const string SummarizationTriggersFile = "summarization_triggers.json";
 
     public event Action<ISettingsService>? SettingsChanged;
 
-    public string VadUrl
+    public ServiceProviderSettings LlmSettings
     {
-        get => Preferences.Default.Get(VadUrlKey, ServerUrlDefault);
-        set { Preferences.Default.Set(VadUrlKey, value); NotifySettingsChanged(); }
+        get => LoadComplexFromJson<ServiceProviderSettings>(LlmSettingsFile) ?? MigrateLegacySetting(LlmUrlKeyLegacy, "LLM-Primary");
+        set { SaveComplexToJson(LlmSettingsFile, value); NotifySettingsChanged(); }
     }
 
-    public string LlmUrl
+    public ServiceProviderSettings VadSettings
     {
-        get
-        {
-            if (!Preferences.Default.ContainsKey(LlmUrlKey))
-            {
-                var legacy = Preferences.Default.Get(LegacyLlamaServerUrlKey, ServerUrlDefault);
-                Preferences.Default.Set(LlmUrlKey, legacy);
-            }
-            return Preferences.Default.Get(LlmUrlKey, ServerUrlDefault);
-        }
-        set { Preferences.Default.Set(LlmUrlKey, value); NotifySettingsChanged(); }
+        get => LoadComplexFromJson<ServiceProviderSettings>(VadSettingsFile) ?? MigrateLegacySetting(VadUrlKeyLegacy, "VAD-Primary");
+        set { SaveComplexToJson(VadSettingsFile, value); NotifySettingsChanged(); }
     }
 
-    public string SttUrl
+    public ServiceProviderSettings SttSettings
     {
-        get
-        {
-            if (!Preferences.Default.ContainsKey(SttUrlKey))
-            {
-                var legacy = Preferences.Default.Get(LegacyLlamaServerUrlKey, ServerUrlDefault);
-                Preferences.Default.Set(SttUrlKey, legacy);
-            }
-            return Preferences.Default.Get(SttUrlKey, ServerUrlDefault);
-        }
-        set { Preferences.Default.Set(SttUrlKey, value); NotifySettingsChanged(); }
+        get => LoadComplexFromJson<ServiceProviderSettings>(SttSettingsFile) ?? MigrateLegacySetting(SttUrlKeyLegacy, "STT-Primary");
+        set { SaveComplexToJson(SttSettingsFile, value); NotifySettingsChanged(); }
     }
 
-    public string TtsUrl
+    public ServiceProviderSettings TtsSettings
     {
-        get
-        {
-            if (!Preferences.Default.ContainsKey(TtsUrlKey))
-            {
-                var legacy = Preferences.Default.Get(LegacyLlamaServerUrlKey, ServerUrlDefault);
-                Preferences.Default.Set(TtsUrlKey, legacy);
-            }
-            return Preferences.Default.Get(TtsUrlKey, ServerUrlDefault);
-        }
-        set { Preferences.Default.Set(TtsUrlKey, value); NotifySettingsChanged(); }
+        get => LoadComplexFromJson<ServiceProviderSettings>(TtsSettingsFile) ?? MigrateLegacySetting(TtsUrlKeyLegacy, "TTS-Primary");
+        set { SaveComplexToJson(TtsSettingsFile, value); NotifySettingsChanged(); }
     }
 
-    public string LlamaModelId
+    private ServiceProviderSettings MigrateLegacySetting(string legacyKey, string defaultName)
     {
-        get => Preferences.Default.Get(LlamaModelIdKey, LlamaModelIdDefault);
-        set { Preferences.Default.Set(LlamaModelIdKey, value); NotifySettingsChanged(); }
+        var url = Preferences.Default.Get(legacyKey, ServerUrlDefault);
+        return new ServiceProviderSettings(
+            ActiveProviderName: defaultName,
+            Providers: [new ProviderConfig(defaultName, url)]
+        );
     }
 
-    public string SelectedModelName
-    {
-        get => Preferences.Default.Get(SelectedModelNameKey, SelectedModelNameDefault);
-        set { Preferences.Default.Set(SelectedModelNameKey, value); NotifySettingsChanged(); }
-    }
 
-    public string SttModelId
+    public GlobalAssistantSettings GlobalSettings
     {
-        get => Preferences.Default.Get(SttModelIdKey, SttModelIdDefault);
-        set { Preferences.Default.Set(SttModelIdKey, value); NotifySettingsChanged(); }
-    }
-
-    public string TtsModelId
-    {
-        get => Preferences.Default.Get(TtsModelIdKey, TtsModelIdDefault);
-        set { Preferences.Default.Set(TtsModelIdKey, value); NotifySettingsChanged(); }
+        get => LoadComplexFromJson<GlobalAssistantSettings>(GlobalSettingsFile) ?? new GlobalAssistantSettings();
+        set { SaveComplexToJson(GlobalSettingsFile, value); NotifySettingsChanged(); }
     }
 
     public List<string> WakeWords
     {
-        get => LoadListFromJson(WakeWordsFile) ?? ["hey quantum"];
-        set { SaveListToJson(WakeWordsFile, value); NotifySettingsChanged(); }
+        get => GlobalSettings.WakeWords;
+        set { GlobalSettings = GlobalSettings with { WakeWords = value }; NotifySettingsChanged(); }
     }
 
     public List<McpServerConfig> McpServers
@@ -153,8 +129,8 @@ public sealed class SettingsService : ISettingsService
 
     public bool UseOnDeviceStt
     {
-        get => Preferences.Default.Get(UseOnDeviceSttKey, true);
-        set { Preferences.Default.Set(UseOnDeviceSttKey, value); NotifySettingsChanged(); }
+        get => GlobalSettings.UseOnDeviceStt;
+        set { GlobalSettings = GlobalSettings with { UseOnDeviceStt = value }; NotifySettingsChanged(); }
     }
 
     public string WhisperModelPath
@@ -176,6 +152,35 @@ public sealed class SettingsService : ISettingsService
     }
 
     private void NotifySettingsChanged() => SettingsChanged?.Invoke(this);
+
+    public string LlmUrl => LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName)?.Url ?? "";
+    public string VadUrl => VadSettings.Providers.FirstOrDefault(p => p.Name == VadSettings.ActiveProviderName)?.Url ?? "";
+    public string SttUrl => SttSettings.Providers.FirstOrDefault(p => p.Name == SttSettings.ActiveProviderName)?.Url ?? "";
+    public string TtsUrl => TtsSettings.Providers.FirstOrDefault(p => p.Name == TtsSettings.ActiveProviderName)?.Url ?? "";
+
+    public string LlamaModelId
+    {
+        get => LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName)?.ModelId ?? "";
+        set { var p = LlmSettings.Providers.ToList(); var idx = p.FindIndex(x => x.Name == LlmSettings.ActiveProviderName); if (idx >= 0) p[idx] = p[idx] with { ModelId = value }; LlmSettings = LlmSettings with { Providers = p }; NotifySettingsChanged(); }
+    }
+
+    public string SelectedModelName
+    {
+        get => LlamaModelId;
+        set { LlamaModelId = value; }
+    }
+
+    public string SttModelId
+    {
+        get => SttSettings.Providers.FirstOrDefault(p => p.Name == SttSettings.ActiveProviderName)?.ModelId ?? "";
+        set { var p = SttSettings.Providers.ToList(); var idx = p.FindIndex(x => x.Name == SttSettings.ActiveProviderName); if (idx >= 0) p[idx] = p[idx] with { ModelId = value }; SttSettings = SttSettings with { Providers = p }; NotifySettingsChanged(); }
+    }
+
+    public string TtsModelId
+    {
+        get => TtsSettings.Providers.FirstOrDefault(p => p.Name == TtsSettings.ActiveProviderName)?.ModelId ?? "";
+        set { var p = TtsSettings.Providers.ToList(); var idx = p.FindIndex(x => x.Name == TtsSettings.ActiveProviderName); if (idx >= 0) p[idx] = p[idx] with { ModelId = value }; TtsSettings = TtsSettings with { Providers = p }; NotifySettingsChanged(); }
+    }
 
     private List<string>? LoadListFromJson(string fileName)
     {

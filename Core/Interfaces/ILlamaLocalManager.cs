@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace QuantumZ.Core.Interfaces
@@ -22,6 +23,11 @@ namespace QuantumZ.Core.Interfaces
         /// Checks if the llama-server binary exists at the designated path.
         /// </summary>
         bool IsBinaryAvailable();
+
+        /// <summary>
+        /// Checks whether the local llama.cpp server health endpoint is reachable without starting or downloading anything.
+        /// </summary>
+        ValueTask<bool> CheckHealthAsync(CancellationToken ct = default);
 
         /// <summary>
         /// Gets a value indicating whether the server is currently running.

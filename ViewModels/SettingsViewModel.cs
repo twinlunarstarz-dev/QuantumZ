@@ -17,6 +17,20 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
     private CancellationTokenSource? _modelRefreshDebounce;
     private bool _suppressModelRefresh;
 
+    private bool _useLocalLlm;
+    public bool UseLocalLlm
+    {
+        get => _useLocalLlm;
+        set => SetProperty(ref _useLocalLlm, value);
+    }
+
+    private bool _useLocalTts;
+    public bool UseLocalTts
+    {
+        get => _useLocalTts;
+        set => SetProperty(ref _useLocalTts, value);
+    }
+
     private bool _showAdvancedNetworkSettings;
     public bool ShowAdvancedNetworkSettings
     {
@@ -24,101 +38,171 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
         set => SetProperty(ref _showAdvancedNetworkSettings, value);
     }
 
-    private string _vadUrl = string.Empty;
-    public string VadUrl
+    // Provider Management Properties
+    private ServiceProviderSettings _llmSettings = new (ActiveProviderName: "LLM-Primary", Providers: []);
+    public ServiceProviderSettings LlmSettings
     {
-        get => _vadUrl;
-        set => SetProperty(ref _vadUrl, value);
+        get => _llmSettings;
+        set => SetProperty(ref _llmSettings, value);
     }
 
-    private string _llmUrl = string.Empty;
-    public string LlmUrl
+    private ServiceProviderSettings _vadSettings = new (ActiveProviderName: "VAD-Primary", Providers: []);
+    public ServiceProviderSettings VadSettings
     {
-        get => _llmUrl;
+        get => _vadSettings;
+        set => SetProperty(ref _vadSettings, value);
+    }
+
+    private ServiceProviderSettings _sttSettings = new (ActiveProviderName: "STT-Primary", Providers: []);
+    public ServiceProviderSettings SttSettings
+    {
+        get => _sttSettings;
+        set => SetProperty(ref _sttSettings, value);
+    }
+
+    private ServiceProviderSettings _ttsSettings = new (ActiveProviderName: "TTS-Primary", Providers: []);
+    public ServiceProviderSettings TtsSettings
+    {
+        get => _ttsSettings;
+        set => SetProperty(ref _ttsSettings, value);
+    }
+
+    // Active Provider Helpers for UI Binding
+    public ProviderConfig? SelectedLlmProvider => LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName);
+    public ProviderConfig? SelectedVadProvider => VadSettings.Providers.FirstOrDefault(p => p.Name == VadSettings.ActiveProviderName);
+    public ProviderConfig? SelectedSttProvider => SttSettings.Providers.FirstOrDefault(p => p.Name == SttSettings.ActiveProviderName);
+    public ProviderConfig? SelectedTtsProvider => TtsSettings.Providers.FirstOrDefault(p => p.Name == TtsSettings.ActiveProviderName);
+
+    // Helper to update active provider and notify UI
+    private void UpdateActiveProvider(string service, string providerName)
+    {
+        switch (service)
+        {
+            case "LLM": LlmSettings = LlmSettings with { ActiveProviderName = providerName }; break;
+            case "VAD": VadSettings = VadSettings with { ActiveProviderName = providerName }; break;
+            case "STT": SttSettings = SttSettings with { ActiveProviderName = providerName }; break;
+            case "TTS": TtsSettings = TtsSettings with { ActiveProviderName = providerName }; break;
+        }
+        OnPropertyChanged(nameof(SelectedLlmProvider));
+        OnPropertyChanged(nameof(SelectedVadProvider));
+        OnPropertyChanged(nameof(SelectedSttProvider));
+        OnPropertyChanged(nameof(SelectedTtsProvider));
+    }
+
+    // Properties for editing the currently selected provider's details (used by UI)
+
+    public ObservableCollection<string> Services { get; } = ["LLM", "VAD", "STT", "TTS"];
+
+    private string _selectedService = "LLM";
+    public string SelectedService
+    {
+        get => _selectedService;
         set
         {
-            if (EqualityComparer<string>.Default.Equals(_llmUrl, value)) return;
-
-            SetProperty(ref _llmUrl, value);
-
-            if (!_suppressModelRefresh)
+            if (SetProperty(ref _selectedService, value))
             {
-                _settings.LlmUrl = (value ?? "").Trim();
-                ScheduleModelRefresh();
+                OnPropertyChanged(nameof(GetCurrentProvider));
+                OnPropertyChanged(nameof(CurrentProviders));
+                OnPropertyChanged(nameof(SelectedProviderName));
             }
         }
     }
 
-    private string _sttUrl = string.Empty;
-    public string SttUrl
-    {
-        get => _sttUrl;
-        set => SetProperty(ref _sttUrl, value);
-    }
+    public List<string> CurrentProviders => GetCurrentSettings()?.Providers.Select(p => p.Name).ToList() ?? [];
 
-    private string _ttsUrl = string.Empty;
-    public string TtsUrl
+    private string _selectedProviderName = string.Empty;
+    public string SelectedProviderName
     {
-        get => _ttsUrl;
-        set => SetProperty(ref _ttsUrl, value);
-    }
-
-    private string _llamaModelId = string.Empty;
-    public string LlamaModelId
-    {
-        get => _llamaModelId;
+        get => _selectedProviderName;
         set
         {
-            if (EqualityComparer<string>.Default.Equals(_llamaModelId, value)) return;
-
-            SetProperty(ref _llamaModelId, value);
-
-            if (!_suppressModelRefresh)
+            if (SetProperty(ref _selectedProviderName, value))
             {
-                var selected = (value ?? "").Trim();
-                _settings.LlamaModelId = selected;
-                if (!string.IsNullOrWhiteSpace(selected))
-                    _settings.SelectedModelName = selected;
+                UpdateActiveProvider(SelectedService, value);
             }
         }
     }
 
-    private string _selectedModelName = string.Empty;
-    public string SelectedModelName
+    private ServiceProviderSettings GetCurrentSettings() => SelectedService switch
     {
-        get => _selectedModelName;
+        "LLM" => LlmSettings,
+        "VAD" => VadSettings,
+        "STT" => SttSettings,
+        "TTS" => TtsSettings,
+        _ => null!
+    };
+
+    public string EditingUrl
+    {
+        get => GetCurrentProvider()?.Url ?? string.Empty;
         set
         {
-            if (EqualityComparer<string>.Default.Equals(_selectedModelName, value)) return;
-
-            SetProperty(ref _selectedModelName, value);
-
-            var selected = (value ?? "").Trim();
-            if (!string.IsNullOrWhiteSpace(selected))
-            {
-                _settings.SelectedModelName = selected;
-                LlamaModelId = selected;
-
-                if (!_suppressModelRefresh)
-                {
-                    StatusMessage = $"Selected LLM model: {selected}";
-                }
-            }
+            UpdateActiveProviderDetails(url: value);
         }
     }
 
-    private string _sttModelId = string.Empty;
-    public string SttModelId
+    private string _editingModelId = string.Empty;
+    public string EditingModelId
     {
-        get => _sttModelId;
-        set => SetProperty(ref _sttModelId, value);
+        get => GetCurrentProvider()?.ModelId ?? string.Empty;
+        set
+        {
+            UpdateActiveProviderDetails(modelId: value);
+        }
     }
 
-    private string _ttsModelId = string.Empty;
-    public string TtsModelId
+    private ProviderConfig? GetCurrentProvider() => SelectedService switch
     {
-        get => _ttsModelId;
-        set => SetProperty(ref _ttsModelId, value);
+        "LLM" => SelectedLlmProvider,
+        "VAD" => SelectedVadProvider,
+        "STT" => SelectedSttProvider,
+        "TTS" => SelectedTtsProvider,
+        _ => null
+    };
+
+    private void UpdateActiveProviderDetails(string? url = null, string? modelId = null)
+    {
+        var current = GetCurrentProvider();
+        if (current == null) return;
+
+        var updated = current with
+        {
+            Url = url ?? current.Url,
+            ModelId = modelId ?? current.ModelId
+        };
+
+        switch (SelectedService)
+        {
+            case "LLM": LlmSettings = UpdateProviderList(LlmSettings, updated); break;
+            case "VAD": VadSettings = UpdateProviderList(VadSettings, updated); break;
+            case "STT": SttSettings = UpdateProviderList(SttSettings, updated); break;
+            case "TTS": TtsSettings = UpdateProviderList(TtsSettings, updated); break;
+        }
+    }
+
+    private ServiceProviderSettings UpdateProviderList(ServiceProviderSettings settings, ProviderConfig updated)
+    {
+        var list = settings.Providers.ToList();
+        var idx = list.FindIndex(p => p.Name == updated.Name);
+        if (idx >= 0) list[idx] = updated; else list.Add(updated);
+        return settings with { Providers = list };
+    }
+
+    private void UpdateCurrentProviderUrl(string url) { } // Obsolete, replaced by EditingUrl setter
+    private void UpdateCurrentProviderModelId(string modelId) { } // Obsolete
+
+    private double _preRollSeconds;
+    public double PreRollSeconds
+    {
+        get => _preRollSeconds;
+        set => SetProperty(ref _preRollSeconds, value);
+    }
+
+    private string _customSystemMessage = string.Empty;
+    public string CustomSystemMessage
+    {
+        get => _customSystemMessage;
+        set => SetProperty(ref _customSystemMessage, value);
     }
 
     private string _wakeWordText = string.Empty;
@@ -167,7 +251,37 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
     public bool UseOnDeviceStt
     {
         get => _useOnDeviceStt;
-        set => SetProperty(ref _useOnDeviceStt, value);
+        set
+        {
+            if (_useOnDeviceStt == value) return;
+
+            SetProperty(ref _useOnDeviceStt, value);
+            SelectedVoiceInputMode = value ? BuiltInAndroidVoiceMode : AiModelVoiceMode;
+            VoiceInputModeDescription = GetVoiceInputModeDescription(value);
+        }
+    }
+
+    private string _selectedVoiceInputMode = BuiltInAndroidVoiceMode;
+    public string SelectedVoiceInputMode
+    {
+        get => _selectedVoiceInputMode;
+        set
+        {
+            if (string.Equals(_selectedVoiceInputMode, value, StringComparison.Ordinal)) return;
+
+            SetProperty(ref _selectedVoiceInputMode, value);
+            var useBuiltIn = string.Equals(value, BuiltInAndroidVoiceMode, StringComparison.Ordinal);
+            if (_useOnDeviceStt != useBuiltIn)
+                SetProperty(ref _useOnDeviceStt, useBuiltIn, nameof(UseOnDeviceStt));
+            VoiceInputModeDescription = GetVoiceInputModeDescription(useBuiltIn);
+        }
+    }
+
+    private string _voiceInputModeDescription = string.Empty;
+    public string VoiceInputModeDescription
+    {
+        get => _voiceInputModeDescription;
+        set => SetProperty(ref _voiceInputModeDescription, value);
     }
 
     private string _whisperModelPath = string.Empty;
@@ -255,6 +369,15 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
         nameof(AudioRoutingPreference.Dynamic)
     ];
 
+    private const string BuiltInAndroidVoiceMode = "Built-in Android dictation";
+    private const string AiModelVoiceMode = "AI model pipeline (VAD + STT)";
+
+    public ObservableCollection<string> VoiceInputModeOptions { get; } =
+    [
+        BuiltInAndroidVoiceMode,
+        AiModelVoiceMode
+    ];
+
     public ObservableCollection<string> AvailableModels { get; } = [];
 
     public ObservableCollection<McpServerConfig> McpServers { get; } = [];
@@ -293,7 +416,7 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
         {
             await Task.Delay(TimeSpan.FromMilliseconds(900), cancellationToken);
 
-            if (cancellationToken.IsCancellationRequested || !IsValidAbsoluteUrl(LlmUrl)) return;
+            if (cancellationToken.IsCancellationRequested || !IsValidAbsoluteUrl(GetCurrentSvcUrl())) return;
 
             await RefreshModelsAsync();
         }
@@ -307,7 +430,7 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
     {
         if (IsDiscoveringModels) return;
 
-        var llmUrl = LlmUrl.Trim();
+        var llmUrl = GetCurrentSvcUrl().Trim();
         if (string.IsNullOrWhiteSpace(llmUrl))
         {
             StatusMessage = "Enter an LLM endpoint URL before refreshing models.";
@@ -321,7 +444,6 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
         }
 
         _modelRefreshDebounce?.Cancel();
-        _settings.LlmUrl = llmUrl;
         IsDiscoveringModels = true;
         StatusMessage = "Discovering LLM models...";
 
@@ -335,7 +457,7 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
                 AvailableModels.Add(model);
             }
 
-            var preferredModel = FirstNonEmpty(SelectedModelName, _settings.SelectedModelName, LlamaModelId, _settings.LlamaModelId);
+            var preferredModel = FirstNonEmpty(SelectedProviderName, _settings.LlmSettings.ActiveProviderName);
             if (!string.IsNullOrWhiteSpace(preferredModel) && !AvailableModels.Contains(preferredModel, StringComparer.OrdinalIgnoreCase))
             {
                 AvailableModels.Insert(0, preferredModel);
@@ -347,9 +469,7 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
                 return;
             }
 
-            SelectedModelName = !string.IsNullOrWhiteSpace(preferredModel)
-                ? AvailableModels.First(m => string.Equals(m, preferredModel, StringComparison.OrdinalIgnoreCase))
-                : AvailableModels[0];
+            // Model selection is now handled via ProviderConfig in the structured settings
 
             StatusMessage = $"Discovered {AvailableModels.Count} LLM model(s).";
         }
@@ -371,81 +491,55 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
 
         try
         {
-            if (string.IsNullOrWhiteSpace(LlmUrl) || string.IsNullOrWhiteSpace(SttUrl) || string.IsNullOrWhiteSpace(TtsUrl))
-            {
-                await _dialogService.ShowAlertAsync("Validation Error", "All server endpoints must be configured.");
-                return;
-            }
-
-            if (!Uri.TryCreate(LlmUrl, UriKind.Absolute, out _) ||
-                !Uri.TryCreate(SttUrl, UriKind.Absolute, out _) ||
-                !Uri.TryCreate(TtsUrl, UriKind.Absolute, out _))
-            {
-                await _dialogService.ShowAlertAsync("Validation Error", "One or more server endpoints have an invalid URL.");
-                return;
-            }
-
             _settings.ShowAdvancedNetworkSettings = ShowAdvancedNetworkSettings;
-            _settings.VadUrl = (VadUrl ?? "").Trim();
-            _settings.LlmUrl = (LlmUrl ?? "").Trim();
-            _settings.SttUrl = (SttUrl ?? "").Trim();
-            _settings.TtsUrl = (TtsUrl ?? "").Trim();
-            var selectedLlmModel = FirstNonEmpty(SelectedModelName, LlamaModelId);
-            _settings.LlamaModelId = selectedLlmModel;
-            _settings.SelectedModelName = selectedLlmModel;
-            LlamaModelId = selectedLlmModel;
-            SelectedModelName = selectedLlmModel;
-            _settings.SttModelId = (SttModelId ?? "").Trim();
-            _settings.TtsModelId = (TtsModelId ?? "").Trim();
-            _settings.WakeWords = [(WakeWordText ?? "").Trim()];
+            _settings.LlmSettings = LlmSettings;
+            _settings.VadSettings = VadSettings;
+            _settings.SttSettings = SttSettings;
+            _settings.TtsSettings = TtsSettings;
 
-            if (Enum.TryParse<AudioRoutingPreference>(SelectedAudioRouting, out var routing))
+            _settings.GlobalSettings = _settings.GlobalSettings with
             {
+                UseLocalLlm = UseLocalLlm,
+                UseLocalTts = UseLocalTts,
+                // PreRoll and CustomSystemMessage are handled below
+            };
+
+            _settings.GlobalSettings = _settings.GlobalSettings with
+            {
+                PreRollSeconds = PreRollSeconds,
+                CustomSystemMessage = CustomSystemMessage
+            };
+
+            // Other settings remain the same as they weren't part of provider refactor yet in this turn
+            if (Enum.TryParse<AudioRoutingPreference>(SelectedAudioRouting, out var routing))
                 _settings.AudioRouting = routing;
-            }
 
             if (int.TryParse(LoggingIntervalMinutes, out var minutes) && minutes > 0)
-            {
                 _settings.LoggingInterval = TimeSpan.FromMinutes(minutes);
-            }
-            else
-            {
-                await _dialogService.ShowAlertAsync("Validation Error", "Logging interval must be a positive number.");
-                return;
-            }
 
             _settings.SummarizationTriggers = SplitList(SummarizationTriggers);
             _settings.EnableActivityLogging = EnableActivityLogging;
             _settings.EnableActivityAnalysis = EnableActivityAnalysis;
+            UseOnDeviceStt = string.Equals(SelectedVoiceInputMode, BuiltInAndroidVoiceMode, StringComparison.Ordinal);
             _settings.UseOnDeviceStt = UseOnDeviceStt;
             _settings.WhisperModelPath = (WhisperModelPath ?? "").Trim();
             _settings.ObsidianVaultPath = (ObsidianVaultPath ?? "").Trim();
             _settings.McpServers = [.. McpServers];
 
-            // Update the Obsidian MCP server path if one exists
+            // Obsidian MCP path update logic...
             var obsidianMcp = _settings.McpServers.FirstOrDefault(s => s.Name == "obsidian");
             if (obsidianMcp != null)
             {
                 var updatedArgs = new List<string>(obsidianMcp.Args);
-                if (updatedArgs.Count > 0)
-                {
-                    updatedArgs[^1] = (ObsidianMcpPath ?? "").Trim();
-                }
-                else
-                {
-                    updatedArgs.Add((ObsidianMcpPath ?? "").Trim());
-                }
-                var updated = obsidianMcp with { Args = updatedArgs };
+                if (updatedArgs.Count > 0) updatedArgs[^1] = (ObsidianMcpPath ?? "").Trim(); else updatedArgs.Add((ObsidianMcpPath ?? "").Trim());
                 var list = _settings.McpServers.ToList();
                 var idx = list.FindIndex(s => s.Name == "obsidian");
-                if (idx >= 0) list[idx] = updated;
+                if (idx >= 0) list[idx] = obsidianMcp with { Args = updatedArgs };
                 _settings.McpServers = list;
             }
 
             StatusMessage = "Configuration saved successfully.";
-            _debugLogger.Log("SettingsViewModel", $"Persisted settings: LlmUrl='{_settings.LlmUrl}', SelectedModelName='{_settings.SelectedModelName}', LlamaModelId='{_settings.LlamaModelId}', UseOnDeviceStt='{_settings.UseOnDeviceStt}', WhisperModelPath='{_settings.WhisperModelPath}'.", LogLevel.Info);
             await _dialogService.ShowAlertAsync("Saved", "Configuration saved successfully.");
-
             await Task.Delay(2000);
             StatusMessage = string.Empty;
         }
@@ -586,47 +680,36 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
             _suppressModelRefresh = true;
 
             ShowAdvancedNetworkSettings = _settings.ShowAdvancedNetworkSettings;
-            VadUrl = _settings.VadUrl;
-            LlmUrl = _settings.LlmUrl;
-            SttUrl = _settings.SttUrl;
-            TtsUrl = _settings.TtsUrl;
-            LlamaModelId = _settings.LlamaModelId;
-            SelectedModelName = FirstNonEmpty(_settings.SelectedModelName, _settings.LlamaModelId);
             AvailableModels.Clear();
-            if (!string.IsNullOrWhiteSpace(SelectedModelName))
+            var activeLlm = LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName);
+            if (activeLlm != null && !string.IsNullOrWhiteSpace(activeLlm.ModelId))
             {
-                AvailableModels.Add(SelectedModelName);
+                AvailableModels.Add(activeLlm.ModelId);
             }
-            SttModelId = _settings.SttModelId;
-            TtsModelId = _settings.TtsModelId;
+            PreRollSeconds = _settings.GlobalSettings.PreRollSeconds;
+            CustomSystemMessage = _settings.GlobalSettings.CustomSystemMessage ?? "";
             WakeWordText = _settings.WakeWords?.FirstOrDefault() ?? "hey quantum";
             SelectedAudioRouting = _settings.AudioRouting.ToString();
             LoggingIntervalMinutes = _settings.LoggingInterval.TotalMinutes.ToString("0");
             SummarizationTriggers = _settings.SummarizationTriggers != null ? string.Join(", ", _settings.SummarizationTriggers) : string.Empty;
             EnableActivityLogging = _settings.EnableActivityLogging;
             EnableActivityAnalysis = _settings.EnableActivityAnalysis;
+            UseLocalLlm = _settings.GlobalSettings.UseLocalLlm;
+            UseLocalTts = _settings.GlobalSettings.UseLocalTts;
             UseOnDeviceStt = _settings.UseOnDeviceStt;
+            SelectedVoiceInputMode = UseOnDeviceStt ? BuiltInAndroidVoiceMode : AiModelVoiceMode;
+            VoiceInputModeDescription = GetVoiceInputModeDescription(UseOnDeviceStt);
             WhisperModelPath = _settings.WhisperModelPath;
             ObsidianVaultPath = _settings.ObsidianVaultPath;
 
             McpServers.Clear();
             foreach (var server in _settings.McpServers)
-            {
                 McpServers.Add(server);
-            }
 
-            // Derive Obsidian MCP path from existing stdio config
             var obsidianMcp = _settings.McpServers.FirstOrDefault(s => s.Name == "obsidian" && s.Transport == McpTransportType.Stdio);
-            if (obsidianMcp?.Args?.Count > 0)
-            {
-                ObsidianMcpPath = obsidianMcp.Args[^1];
-            }
-            else
-            {
-                ObsidianMcpPath = _settings.ObsidianVaultPath;
-            }
+            ObsidianMcpPath = obsidianMcp?.Args?.Count > 0 ? obsidianMcp.Args[^1] : _settings.ObsidianVaultPath;
 
-            _debugLogger.Log("SettingsViewModel", $"Loaded settings: LlmUrl='{LlmUrl}', SelectedModelName='{SelectedModelName}', LlamaModelId='{LlamaModelId}', UseOnDeviceStt='{UseOnDeviceStt}', WhisperModelPath='{WhisperModelPath}'.", LogLevel.Info);
+            _debugLogger.Log("SettingsViewModel", $"Loaded structured settings: LLMProvider='{LlmSettings.ActiveProviderName}', STTProvider='{SttSettings.ActiveProviderName}'.", LogLevel.Info);
         }
         catch (Exception ex)
         {
@@ -636,8 +719,15 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
         finally
         {
             _suppressModelRefresh = false;
+            var activeLlmProvider = LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName);
+            if (activeLlmProvider != null && IsValidAbsoluteUrl(activeLlmProvider.Url))
+            {
+                _ = RefreshModelsAsync();
+            }
         }
     }
+
+    private string GetCurrentSvcUrl() => SelectedLlmProvider?.Url ?? "";
 
     private static List<string> SplitList(string value)
     {
@@ -652,11 +742,8 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
 
     private static string FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
-}
 
-public class RelayCommand<T>(Action<T?> execute) : ICommand
-{
-    public event EventHandler? CanExecuteChanged;
-    public bool CanExecute(object? parameter) => true;
-    public void Execute(object? parameter) => execute((T?)parameter);
+    private static string GetVoiceInputModeDescription(bool useBuiltIn) => useBuiltIn
+        ? "Uses Android SpeechRecognizer for continuous wake-word dictation. It is fast, but not controlled by VAD/STT model settings."
+        : "Uses the AI audio pipeline: provider-routed VAD plus the configured STT model/endpoint. This disables Android built-in dictation.";
 }

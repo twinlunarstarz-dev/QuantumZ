@@ -71,6 +71,7 @@ public class McpOrchestrator(HttpClient httpClient, ISettingsService settings) :
     }
 
     private async ValueTask<T?> SendJsonRpcAsync<T>(McpServerConfig server, string method, object? parameters, CancellationToken ct)
+        where T : class
     {
         try
         {

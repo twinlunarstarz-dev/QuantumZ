@@ -13,14 +13,17 @@ public sealed class OnDeviceSpeechRecognizer : Java.Lang.Object, IRecognitionLis
 {
     private readonly Context _context;
     private readonly Action<string> _onResult;
+    private readonly Action<string>? _onPartialResult;
     private SpeechRecognizer? _speechRecognizer;
     private bool _isListening;
     private bool _disposed;
+    private int _consecutiveFailures = 0;
 
-    public OnDeviceSpeechRecognizer(Context context, Action<string> onResult)
+    public OnDeviceSpeechRecognizer(Context context, Action<string> onResult, Action<string>? onPartialResult = null)
     {
         _context = context;
         _onResult = onResult;
+        _onPartialResult = onPartialResult;
 
         if (!SpeechRecognizer.IsRecognitionAvailable(context))
             throw new InvalidOperationException("SpeechRecognizer is not available on this device.");
@@ -111,15 +114,20 @@ public sealed class OnDeviceSpeechRecognizer : Java.Lang.Object, IRecognitionLis
         _speechRecognizer = null;
     }
 
-    private void ScheduleRestart(int delayMs)
+    private void ScheduleRestart(int baseDelayMs)
     {
         if (_disposed) return;
+
+        // Implement exponential backoff for consecutive failures to prevent hammering the service.
+        // Max delay capped at 10 seconds.
+        int actualDelay = Math.Min(baseDelayMs * (int)Math.Pow(2, _consecutiveFailures), 10000);
+        
         Task.Run(async () =>
         {
-            await Task.Delay(delayMs);
+            await Task.Delay(actualDelay);
             if (!_disposed)
             {
-                global::Android.Util.Log.Info("QuantumZ", $"Restarting recognizer after {delayMs}ms delay.");
+                global::Android.Util.Log.Info("QuantumZ", $"Restarting recognizer after {actualDelay}ms delay (failure count: {_consecutiveFailures}).");
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
                     if (_disposed) return;
@@ -161,9 +169,33 @@ public sealed class OnDeviceSpeechRecognizer : Java.Lang.Object, IRecognitionLis
         _isListening = false;
         if (_disposed) return;
 
-        global::Android.Util.Log.Error("QuantumZ", $"SpeechRecognizer error: {error}");
+        // Treat ServerDisconnected as a transient warning rather than a critical error to reduce log noise.
+        bool isTransient = error == SpeechRecognizerError.ServerDisconnected || error == SpeechRecognizerError.Network;
+        if (isTransient)
+            global::Android.Util.Log.Warn("QuantumZ", $"SpeechRecognizer transient error: {error}. Attempting silent restart...");
+        else
+            global::Android.Util.Log.Error("QuantumZ", $"SpeechRecognizer critical error: {error}");
 
-        var delay = error is SpeechRecognizerError.NoMatch or SpeechRecognizerError.Client ? 500 : 100;
+        // Increment failure count for backoff unless it's a trivial "no match" or expected transient disconnect.
+        if (error is not SpeechRecognizerError.NoMatch && !isTransient)
+        {
+            _consecutiveFailures++;
+        }
+        else if (isTransient)
+        {
+            // Reset failure count for transients to keep restart delays low and responsive.
+            _consecutiveFailures = Math.Max(0, _consecutiveFailures - 1);
+        }
+
+        // Use a very aggressive restart delay for transient server disconnects to minimize the "gap" in listening.
+        var delay = error switch
+        {
+            SpeechRecognizerError.NoMatch => 500,
+            SpeechRecognizerError.ServerDisconnected or SpeechRecognizerError.Network => 100,
+            SpeechRecognizerError.Client => 500,
+            _ => 200
+        };
+
         ScheduleRestart(delay);
     }
 
@@ -171,6 +203,9 @@ public sealed class OnDeviceSpeechRecognizer : Java.Lang.Object, IRecognitionLis
     {
         _isListening = false;
         if (_disposed) return;
+
+        // Reset failure count on successful result.
+        _consecutiveFailures = 0;
 
         var matches = results?.GetStringArrayList(SpeechRecognizer.ResultsRecognition);
         global::Android.Util.Log.Info("QuantumZ", $"OnResults called with {matches?.Count ?? 0} match(es).");
@@ -190,6 +225,7 @@ public sealed class OnDeviceSpeechRecognizer : Java.Lang.Object, IRecognitionLis
         if (partial?.Count > 0)
         {
             global::Android.Util.Log.Debug("QuantumZ", $"Partial result: '{partial[0]}'");
+            _onPartialResult?.Invoke(partial[0]);
         }
     }
 

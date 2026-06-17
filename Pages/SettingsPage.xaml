@@ -4,6 +4,7 @@
              xmlns:vm="clr-namespace:QuantumZ.UI.ViewModels"
              xmlns:settings="clr-namespace:QuantumZ.Core.Models.Settings"
              x:Class="QuantumZ.UI.Pages.SettingsPage"
+             NavigationPage.HasNavigationBar="False"
              Title="System Configuration">
 
     <Grid BackgroundColor="{StaticResource CrimsonBackground}"
@@ -60,161 +61,140 @@
                            HorizontalOptions="Center" />
                 </Border>
 
-                <!-- Provider Router Control -->
+                <!-- Backend Configuration Hierarchy -->
                 <Border Style="{StaticResource HudPanel}">
                     <VerticalStackLayout Spacing="14">
-                        <Label Text="PROVIDER ROUTER CONTROL"
+                        <Label Text="BACKEND CONFIGURATION"
                                Style="{StaticResource CyberLabelSection}" />
 
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                            <Label Grid.Column="0"
-                                   Text="Expose advanced network controls"
-                                   Style="{StaticResource CyberLabelBody}"
-                                   FontSize="13"
-                                   VerticalOptions="Center" />
-                            <Switch Grid.Column="1"
-                                   IsToggled="{Binding ShowAdvancedNetworkSettings}"
-                                   Style="{StaticResource CyberSwitch}" />
-                        </Grid>
+                        <VerticalStackLayout Spacing="12">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                <Label Grid.Column="0"
+                                        Text="Use Local LLM (llama.cpp)"
+                                        Style="{StaticResource CyberLabelBody}"
+                                        FontSize="13"
+                                        VerticalOptions="Center" />
+                                <Switch Grid.Column="1"
+                                        IsToggled="{Binding UseLocalLlm}"
+                                        Style="{StaticResource CyberSwitch}" />
+                            </Grid>
 
-                        <VerticalStackLayout Spacing="6">
-                            <Label Text="Primary LLM Endpoint URL"
-                                   Style="{StaticResource CyberLabelBody}"
-                                   FontSize="13" />
-                            <Entry Text="{Binding LlmUrl}"
-                                   Placeholder="http://100.117.207.123:8025/v1"
-                                   Style="{StaticResource CyberEntry}" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                <Label Grid.Column="0"
+                                        Text="Use Local TTS (Android/On-Device)"
+                                        Style="{StaticResource CyberLabelBody}"
+                                        FontSize="13"
+                                        VerticalOptions="Center" />
+                                <Switch Grid.Column="1"
+                                        IsToggled="{Binding UseLocalTts}"
+                                        Style="{StaticResource CyberSwitch}" />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                <Label Grid.Column="0"
+                                        Text="Expose advanced network controls"
+                                        Style="{StaticResource CyberLabelBody}"
+                                        FontSize="13"
+                                        VerticalOptions="Center" />
+                                <Switch Grid.Column="1"
+                                        IsToggled="{Binding ShowAdvancedNetworkSettings}"
+                                        Style="{StaticResource CyberSwitch}" />
+                            </Grid>
                         </VerticalStackLayout>
 
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                            <VerticalStackLayout Grid.Column="0" Spacing="6">
-                                <Label Text="Discovered LLM Model"
-                                       Style="{StaticResource CyberLabelBody}"
-                                       FontSize="13" />
-                                <Picker ItemsSource="{Binding AvailableModels}"
-                                        SelectedItem="{Binding SelectedModelName}"
-                                        Title="Refresh models to choose one"
-                                        Style="{StaticResource CyberPicker}" />
+                        <VerticalStackLayout Spacing="6"
+                                             IsVisible="{Binding ShowAdvancedNetworkSettings}">
+                            <Label Text="Active Service Pipeline"
+                                    Style="{StaticResource CyberLabelBody}"
+                                    FontSize="13" />
+                            <Picker ItemsSource="{Binding Services}"
+                                    SelectedItem="{Binding SelectedService}"
+                                    Title="Select service to configure"
+                                    Style="{StaticResource CyberPicker}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="6"
+                                             IsVisible="{Binding ShowAdvancedNetworkSettings}">
+                            <Label Text="Provider Routing"
+                                    Style="{StaticResource CyberLabelBody}"
+                                    FontSize="13" />
+                            <Picker ItemsSource="{Binding CurrentProviders}"
+                                    SelectedItem="{Binding SelectedProviderName}"
+                                    Title="Select provider for this service"
+                                    Style="{StaticResource CyberPicker}" />
+                        </VerticalStackLayout>
+
+                        <Border Style="{StaticResource InsetGlassPanel}" Padding="12"
+                                IsVisible="{Binding ShowAdvancedNetworkSettings}">
+                            <VerticalStackLayout Spacing="10">
+                                <Label Text="PROVIDER PARAMETERS"
+                                        Style="{StaticResource CyberLabelMuted}"
+                                        FontSize="11"
+                                        FontAttributes="Bold" />
+
+                                <VerticalStackLayout Spacing="6">
+                                    <Label Text="Endpoint URL"
+                                            Style="{StaticResource CyberLabelBody}"
+                                            FontSize="12" />
+                                    <Entry Text="{Binding EditingUrl}"
+                                           Placeholder="http://..."
+                                           Style="{StaticResource CyberEntry}" />
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Spacing="6">
+                                    <Label Text="Model Identifier"
+                                            Style="{StaticResource CyberLabelBody}"
+                                            FontSize="12" />
+                                    <Entry Text="{Binding EditingModelId}"
+                                           Placeholder="model-id..."
+                                           Style="{StaticResource CyberEntry}" />
+                                </VerticalStackLayout>
+
+                                <Button Text="Refresh Models (LLM)"
+                                        Command="{Binding RefreshModelsCommand}"
+                                        IsVisible="{Binding SelectedService, Converter={StaticResource StringEqualsConverter}, ConverterParameter='LLM'}"
+                                        Style="{StaticResource GhostButton}" />
                             </VerticalStackLayout>
+                        </Border>
 
-                            <ActivityIndicator Grid.Column="1"
-                                               IsRunning="{Binding IsDiscoveringModels}"
-                                               IsVisible="{Binding IsDiscoveringModels}"
-                                               Color="{StaticResource CyberRedNeon}"
-                                               WidthRequest="32"
-                                               HeightRequest="32"
-                                               VerticalOptions="End" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                             <Label Grid.Column="0"
+                                    Text="Dynamic routing active based on selected provider."
+                                    Style="{StaticResource CyberLabelMuted}"
+                                    FontSize="11" />
+                             <ActivityIndicator Grid.Column="1"
+                                                IsRunning="{Binding IsDiscoveringModels}"
+                                                IsVisible="{Binding IsDiscoveringModels}"
+                                                Color="{StaticResource CyberRedNeon}"
+                                                WidthRequest="24"
+                                                HeightRequest="24" />
                         </Grid>
-
-                        <Button Text="Refresh Models"
-                                Command="{Binding RefreshModelsCommand}"
-                                IsEnabled="{Binding IsDiscoveringModels, Converter={StaticResource InvertedBoolConverter}}"
-                                Style="{StaticResource GhostButton}" />
-
-                        <VerticalStackLayout Spacing="6">
-                            <Label Text="Manual LLM Model ID Fallback"
-                                      Style="{StaticResource CyberLabelBody}"
-                                      FontSize="13" />
-                            <Entry Text="{Binding LlamaModelId}"
-                                     Placeholder="llama3"
-                                     Style="{StaticResource CyberEntry}" />
-                        </VerticalStackLayout>
                     </VerticalStackLayout>
                 </Border>
 
-                <!-- Custom Provider URLs -->
-                <Border Style="{StaticResource NeonFrame}">
+                <!-- Assistant Core Settings -->
+                <Border Style="{StaticResource HudPanel}">
                     <VerticalStackLayout Spacing="14">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                            <VerticalStackLayout Grid.Column="0" Spacing="3">
-                                <Label Text="CUSTOM PROVIDER URLS"
-                                       Style="{StaticResource CyberLabelSection}"
-                                       Margin="0" />
-                                <Label Text="Route each voice pipeline capability to an OpenAI-compatible or custom service endpoint."
-                                       Style="{StaticResource CyberLabelMuted}"
-                                       FontSize="12"
-                                       LineBreakMode="WordWrap" />
-                            </VerticalStackLayout>
-                            <Border Grid.Column="1"
-                                    Style="{StaticResource StatusPill}"
-                                    VerticalOptions="Start">
-                                <Label Text="FAILOVER READY"
-                                       TextColor="{StaticResource CrimsonSuccess}"
-                                       FontSize="10"
-                                       FontAttributes="Bold"
-                                       CharacterSpacing="1.2" />
-                            </Border>
-                        </Grid>
+                        <Label Text="Assistant Core"
+                                Style="{StaticResource CyberLabelSection}" />
 
-                        <Grid RowDefinitions="Auto,Auto"
-                              RowSpacing="14">
-                            <Grid Grid.Row="0"
-                                  ColumnDefinitions="*,*"
-                                  ColumnSpacing="12">
-                                <VerticalStackLayout Grid.Column="0" Spacing="6">
-                                    <Label Text="VAD Endpoint URL"
-                                           Style="{StaticResource CyberLabelBody}"
-                                           FontSize="13" />
-                                    <Entry Text="{Binding VadUrl}"
-                                           Placeholder="http://localhost:8025/v1/vad"
-                                           Style="{StaticResource CyberEntry}" />
-                                </VerticalStackLayout>
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Custom System Message"
+                                    Style="{StaticResource CyberLabelBody}"
+                                    FontSize="13" />
+                            <Entry Text="{Binding CustomSystemMessage}"
+                                    Placeholder="You are a tactical aerospace assistant..."
+                                    Style="{StaticResource CyberEntry}" />
+                        </VerticalStackLayout>
 
-                                <VerticalStackLayout Grid.Column="1" Spacing="6">
-                                    <Label Text="STT Endpoint URL"
-                                           Style="{StaticResource CyberLabelBody}"
-                                           FontSize="13" />
-                                    <Entry Text="{Binding SttUrl}"
-                                           Placeholder="http://localhost:8025/v1/audio/transcriptions"
-                                           Style="{StaticResource CyberEntry}" />
-                                </VerticalStackLayout>
-                            </Grid>
-
-                            <Grid Grid.Row="1"
-                                  ColumnDefinitions="*,*"
-                                  ColumnSpacing="12">
-                                <VerticalStackLayout Grid.Column="0" Spacing="6">
-                                    <Label Text="LLM Endpoint URL"
-                                           Style="{StaticResource CyberLabelBody}"
-                                           FontSize="13" />
-                                    <Entry Text="{Binding LlmUrl}"
-                                           Placeholder="http://localhost:8025/v1"
-                                           Style="{StaticResource CyberEntry}" />
-                                </VerticalStackLayout>
-
-                                <VerticalStackLayout Grid.Column="1" Spacing="6">
-                                    <Label Text="TTS Endpoint URL"
-                                           Style="{StaticResource CyberLabelBody}"
-                                           FontSize="13" />
-                                    <Entry Text="{Binding TtsUrl}"
-                                           Placeholder="http://localhost:8025/v1/audio/speech"
-                                           Style="{StaticResource CyberEntry}" />
-                                </VerticalStackLayout>
-                            </Grid>
-                        </Grid>
-
-                        <VerticalStackLayout Spacing="14" IsVisible="{Binding ShowAdvancedNetworkSettings}">
-                            <BoxView HeightRequest="1" BackgroundColor="{StaticResource GlassBorder}" Opacity="0.5" Margin="0,4" />
-
-                            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                                <VerticalStackLayout Grid.Column="0" Spacing="6">
-                                    <Label Text="STT Model ID"
-                                            Style="{StaticResource CyberLabelBody}"
-                                            FontSize="13" />
-                                    <Entry Text="{Binding SttModelId}"
-                                            Placeholder="whisper-base"
-                                            Style="{StaticResource CyberEntry}" />
-                                </VerticalStackLayout>
-
-                                <VerticalStackLayout Grid.Column="1" Spacing="6">
-                                    <Label Text="TTS Model ID"
-                                            Style="{StaticResource CyberLabelBody}"
-                                            FontSize="13" />
-                                    <Entry Text="{Binding TtsModelId}"
-                                            Placeholder="tts-default"
-                                            Style="{StaticResource CyberEntry}" />
-                                </VerticalStackLayout>
-                            </Grid>
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Pre-roll Buffer (seconds)"
+                                    Style="{StaticResource CyberLabelBody}"
+                                    FontSize="13" />
+                            <Entry Text="{Binding PreRollSeconds}"
+                                    Keyboard="Numeric"
+                                    Placeholder="1.0"
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
                     </VerticalStackLayout>
                 </Border>
@@ -223,7 +203,7 @@
                 <Border Style="{StaticResource HudPanel}">
                     <VerticalStackLayout Spacing="14">
                         <Label Text="Voice Control"
-                               Style="{StaticResource CyberLabelSection}" />
+                                Style="{StaticResource CyberLabelSection}" />
 
                         <VerticalStackLayout Spacing="6">
                             <Label Text="Wake Word"
@@ -243,19 +223,21 @@
                                     Style="{StaticResource CyberPicker}" />
                         </VerticalStackLayout>
 
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                            <Label Grid.Column="0"
-                                   Text="Use On-Device STT (Whisper)"
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Voice Input Mode"
                                    Style="{StaticResource CyberLabelBody}"
-                                   FontSize="13"
-                                   VerticalOptions="Center" />
-                            <Switch Grid.Column="1"
-                                    IsToggled="{Binding UseOnDeviceStt}"
-                                    Style="{StaticResource CyberSwitch}" />
-                        </Grid>
+                                   FontSize="13" />
+                            <Picker ItemsSource="{Binding VoiceInputModeOptions}"
+                                    SelectedItem="{Binding SelectedVoiceInputMode}"
+                                    Style="{StaticResource CyberPicker}" />
+                            <Label Text="{Binding VoiceInputModeDescription}"
+                                   Style="{StaticResource CyberLabelMuted}"
+                                   FontSize="12"
+                                   LineBreakMode="WordWrap" />
+                        </VerticalStackLayout>
 
                         <VerticalStackLayout Spacing="6"
-                                             IsVisible="{Binding UseOnDeviceStt}">
+                                             IsVisible="{Binding UseOnDeviceStt, Converter={StaticResource InvertedBoolConverter}}">
                             <Label Text="Whisper Model Path"
                                    Style="{StaticResource CyberLabelBody}"
                                    FontSize="13" />

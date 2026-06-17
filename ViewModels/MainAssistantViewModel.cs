@@ -16,11 +16,17 @@ public class MainAssistantViewModel(
     IActivityLogger activityLogger,
     ILogSummaryService logSummaryService,
     IModelRegistry modelRegistry,
+    ILlamaLocalManager llamaLocalManager,
+    IAIClient aiClient,
+    IProviderRouter providerRouter,
+    IMcpOrchestrator mcpOrchestrator,
+    IMemoryService memoryService,
     ActivityAnalyzerService activityAnalyzer,
     IDialogService dialogService,
     WhisperModelDownloader whisperDownloader,
     ISpeechStateService speechStateService,
-    IThermalMonitor thermalMonitor) : BaseViewModel
+    IThermalMonitor thermalMonitor,
+    IDebugLogger debugLogger) : BaseViewModel
 {
     private readonly IFluxAssetService _assetService = assetService ?? throw new ArgumentNullException(nameof(assetService));
     private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
@@ -29,13 +35,22 @@ public class MainAssistantViewModel(
     private readonly IActivityLogger _activityLogger = activityLogger ?? throw new ArgumentNullException(nameof(activityLogger));
     private readonly ILogSummaryService _logSummaryService = logSummaryService ?? throw new ArgumentNullException(nameof(logSummaryService));
     private readonly IModelRegistry _modelRegistry = modelRegistry ?? throw new ArgumentNullException(nameof(modelRegistry));
+    private readonly ILlamaLocalManager _llamaLocalManager = llamaLocalManager ?? throw new ArgumentNullException(nameof(llamaLocalManager));
+    private readonly IAIClient _aiClient = aiClient ?? throw new ArgumentNullException(nameof(aiClient));
+    private readonly IProviderRouter _providerRouter = providerRouter ?? throw new ArgumentNullException(nameof(providerRouter));
+    private readonly IMcpOrchestrator _mcpOrchestrator = mcpOrchestrator ?? throw new ArgumentNullException(nameof(mcpOrchestrator));
+    private readonly IMemoryService _memoryService = memoryService ?? throw new ArgumentNullException(nameof(memoryService));
     private readonly ActivityAnalyzerService _activityAnalyzer = activityAnalyzer ?? throw new ArgumentNullException(nameof(activityAnalyzer));
     private readonly IDialogService _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
     private readonly WhisperModelDownloader _whisperDownloader = whisperDownloader ?? throw new ArgumentNullException(nameof(whisperDownloader));
     private readonly ISpeechStateService _speechStateService = speechStateService ?? throw new ArgumentNullException(nameof(speechStateService));
     private readonly IThermalMonitor _thermalMonitor = thermalMonitor ?? throw new ArgumentNullException(nameof(thermalMonitor));
+    private readonly IDebugLogger _debugLogger = debugLogger ?? throw new ArgumentNullException(nameof(debugLogger));
+    private DateTime _lastServiceHealthRefreshUtc = DateTime.MinValue;
+    private bool _serviceHealthRefreshInFlight;
+    private bool _startupMonitorAttempted;
 
-    private string _assistantImageSource = "dotnet_bot.png";
+    private string _assistantImageSource = string.Empty;
     public string AssistantImageSource
     {
         get => _assistantImageSource;
@@ -144,6 +159,66 @@ public class MainAssistantViewModel(
 
     public ObservableCollection<HudMetric> ServerTelemetryItems { get; } = [];
 
+    public ObservableCollection<ServiceHealthMetric> ServiceHealthItems { get; } = [];
+
+    public ObservableCollection<HudMetric> MemoryStatusItems { get; } = [];
+
+    private string _serviceHealthSummaryText = "Health checks pending";
+    public string ServiceHealthSummaryText
+    {
+        get => _serviceHealthSummaryText;
+        set => SetProperty(ref _serviceHealthSummaryText, value);
+    }
+
+    private string _panelTitle = string.Empty;
+    public string PanelTitle
+    {
+        get => _panelTitle;
+        set => SetProperty(ref _panelTitle, value);
+    }
+
+    private string _panelSubtitle = string.Empty;
+    public string PanelSubtitle
+    {
+        get => _panelSubtitle;
+        set => SetProperty(ref _panelSubtitle, value);
+    }
+
+    private bool _isAnyPanelOpen;
+    public bool IsAnyPanelOpen
+    {
+        get => _isAnyPanelOpen;
+        set => SetProperty(ref _isAnyPanelOpen, value);
+    }
+
+    private string _memorySummaryCountText = "0 ITEMS";
+    public string MemorySummaryCountText
+    {
+        get => _memorySummaryCountText;
+        set => SetProperty(ref _memorySummaryCountText, value);
+    }
+
+    private string _memoryVaultPathText = "Vault path pending";
+    public string MemoryVaultPathText
+    {
+        get => _memoryVaultPathText;
+        set => SetProperty(ref _memoryVaultPathText, value);
+    }
+
+    private string _lastMemorySummaryText = "No memory summaries loaded yet.";
+    public string LastMemorySummaryText
+    {
+        get => _lastMemorySummaryText;
+        set => SetProperty(ref _lastMemorySummaryText, value);
+    }
+
+    private string _configVoiceRouteText = "Voice route telemetry pending.";
+    public string ConfigVoiceRouteText
+    {
+        get => _configVoiceRouteText;
+        set => SetProperty(ref _configVoiceRouteText, value);
+    }
+
     private bool _isBusy;
     public bool IsBusy
     {
@@ -163,6 +238,9 @@ public class MainAssistantViewModel(
     private ICommand? _navigateToMemoryCommand;
     public ICommand NavigateToMemoryCommand => _navigateToMemoryCommand ??= new AsyncRelayCommand(NavigateToMemoryAsync);
 
+    private ICommand? _navigateToDebugCommand;
+    public ICommand NavigateToDebugCommand => _navigateToDebugCommand ??= new AsyncRelayCommand(NavigateToDebugAsync);
+
     private bool _isDetailViewOpen;
     public bool IsDetailViewOpen
     {
@@ -170,12 +248,109 @@ public class MainAssistantViewModel(
         set => SetProperty(ref _isDetailViewOpen, value);
     }
 
+    private bool _isMemoryViewOpen;
+    public bool IsMemoryViewOpen
+    {
+        get => _isMemoryViewOpen;
+        set => SetProperty(ref _isMemoryViewOpen, value);
+    }
+
+    private bool _isConfigViewOpen;
+    public bool IsConfigViewOpen
+    {
+        get => _isConfigViewOpen;
+        set => SetProperty(ref _isConfigViewOpen, value);
+    }
+
     private ICommand? _toggleDetailCommand;
     public ICommand ToggleDetailCommand => _toggleDetailCommand ??= new RelayCommand(ToggleDetail);
+
+    private ICommand? _toggleMemoryCommand;
+    public ICommand ToggleMemoryCommand => _toggleMemoryCommand ??= new RelayCommand(ToggleMemory);
+
+    private ICommand? _toggleConfigCommand;
+    public ICommand ToggleConfigCommand => _toggleConfigCommand ??= new RelayCommand(ToggleConfig);
+
+    private ICommand? _closePanelCommand;
+    public ICommand ClosePanelCommand => _closePanelCommand ??= new RelayCommand(() => ClosePanels());
+
+    private ICommand? _refreshServiceHealthCommand;
+    public ICommand RefreshServiceHealthCommand => _refreshServiceHealthCommand ??= new AsyncRelayCommand(RefreshServiceHealthAsync);
 
     private void ToggleDetail()
     {
         IsDetailViewOpen = !IsDetailViewOpen;
+        if (IsDetailViewOpen)
+        {
+            IsMemoryViewOpen = false;
+            IsConfigViewOpen = false;
+            PanelTitle = "Assistant Details";
+            PanelSubtitle = "Transcript, model routing, and live service verification.";
+            IsAnyPanelOpen = true;
+            _ = RefreshServiceHealthAsync(force: false);
+        }
+        else
+        {
+            UpdatePanelState();
+        }
+    }
+
+    private void ToggleMemory()
+    {
+        IsMemoryViewOpen = !IsMemoryViewOpen;
+        if (IsMemoryViewOpen)
+        {
+            IsDetailViewOpen = false;
+            IsConfigViewOpen = false;
+            PanelTitle = "Memory Vault";
+            PanelSubtitle = "Recent summaries, local vault status, and memory routing.";
+            IsAnyPanelOpen = true;
+            _ = RefreshMemoryTelemetryAsync();
+        }
+        else
+        {
+            UpdatePanelState();
+        }
+    }
+
+    private void ToggleConfig()
+    {
+        IsConfigViewOpen = !IsConfigViewOpen;
+        if (IsConfigViewOpen)
+        {
+            IsDetailViewOpen = false;
+            IsMemoryViewOpen = false;
+            PanelTitle = "Assistant Config";
+            PanelSubtitle = "Provider routes, active model, audio path, and MCP fabric.";
+            IsAnyPanelOpen = true;
+            _ = RefreshHudTelemetryAsync();
+        }
+        else
+        {
+            UpdatePanelState();
+        }
+    }
+
+    public bool ClosePanels()
+    {
+        if (!IsAnyPanelOpen && !IsDetailViewOpen && !IsMemoryViewOpen && !IsConfigViewOpen)
+            return false;
+
+        IsDetailViewOpen = false;
+        IsMemoryViewOpen = false;
+        IsConfigViewOpen = false;
+        UpdatePanelState();
+        return true;
+    }
+
+    private void UpdatePanelState()
+    {
+        IsAnyPanelOpen = IsDetailViewOpen || IsMemoryViewOpen || IsConfigViewOpen;
+        if (!IsAnyPanelOpen)
+        {
+            PanelTitle = string.Empty;
+            PanelSubtitle = string.Empty;
+        }
     }
 
     private ICommand? _summarizeNowCommand;
@@ -195,6 +370,8 @@ public class MainAssistantViewModel(
         _speechStateService.TranscriptionChanged += OnTranscriptionChanged;
         _thermalMonitor.StateChanged += OnThermalStateChanged;
         _ = RefreshHudTelemetryAsync();
+        _ = RefreshMemoryTelemetryAsync();
+        _ = RefreshServiceHealthAsync(force: false);
     }
 
     public void DetachVisualizerEvents()
@@ -271,70 +448,25 @@ public class MainAssistantViewModel(
         });
     }
 
-    private async Task ToggleListeningAsync()
-    {
-        if (IsBusy) return;
-        IsBusy = true;
+    private async Task ToggleListeningAsync() => await SetListeningAsync(!IsListening);
 
+    public async Task SetListeningAsync(bool shouldListen)
+    {
+        if (IsBusy || shouldListen == IsListening)
+            return;
+
+        IsBusy = true;
         try
         {
-            if (!IsListening)
-            {
-                if (!await EnsureMicrophonePermissionAsync())
-                    return;
-
-                if (_settingsService.UseOnDeviceStt && !_whisperDownloader.ModelExists())
-                {
-                    var download = await _dialogService.ShowConfirmAsync(
-                        "Whisper Model Missing",
-                        "The on-device Whisper model is not present. Download it now? (~150 MB)");
-                    if (download)
-                    {
-                        AiStatusText = "Downloading model...";
-                        StatusColor = "#FFA500";
-                        try
-                        {
-                            var progress = new Progress<double>(p =>
-                            {
-                                AiStatusText = $"Downloading model... {p:P0}";
-                            });
-                            await _whisperDownloader.EnsureModelAsync(progress);
-                            await _dialogService.ShowAlertAsync("Download Complete", "Whisper model is ready.");
-                        }
-                        catch (Exception ex)
-                        {
-                            await _dialogService.ShowAlertAsync("Download Failed", $"Could not download Whisper model: {ex.Message}");
-                            AiStatusText = "Ready";
-                            StatusColor = "#9A9A9A";
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        return;
-                    }
-                }
-
-                StartMicrophoneService();
-                IsListening = true;
-                AiStatusText = "Listening...";
-                StatusColor = "#FF003C";
-                TranscriptionStatusText = "STT STREAM ARMED";
-                StreamingTranscriptDisplay = "Listening for speech vector...";
-            }
+            if (shouldListen)
+                await StartListeningAsync();
             else
-            {
-                StopMicrophoneService();
-                IsListening = false;
-                AiStatusText = "Ready";
-                StatusColor = "#9A9A9A";
-                TranscriptionStatusText = "STT STREAM IDLE";
-                StreamingTranscriptDisplay = "Awaiting voice stream...";
-            }
+                StopListeningCore();
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Toggle listening failed: {ex}");
+            _debugLogger.Log("MainAssistant", $"Monitoring toggle failed: {ex.Message}", LogLevel.Error);
             AiStatusText = "Error";
             StatusColor = "#FF0000";
             await _dialogService.ShowAlertAsync("Listening Error", ex.Message);
@@ -345,7 +477,30 @@ public class MainAssistantViewModel(
         }
     }
 
+    private async Task StartListeningAsync()
+    {
+        if (!await EnsureMicrophonePermissionAsync())
+            return;
+
+        if (_settingsService.UseOnDeviceStt && !_whisperDownloader.ModelExists())
+        {
+            _debugLogger.Log("MainAssistant", "On-device Whisper model is missing; Android SpeechRecognizer fallback remains available.", LogLevel.Warning);
+        }
+
+        StartMicrophoneService();
+        IsListening = true;
+        AiStatusText = "Listening...";
+        StatusColor = "#FF003C";
+        TranscriptionStatusText = "STT STREAM ARMED";
+        StreamingTranscriptDisplay = "Listening for wake word and live dictation...";
+    }
+
     private void StopListening()
+    {
+        StopListeningCore();
+    }
+
+    private void StopListeningCore()
     {
         StopMicrophoneService();
         IsListening = false;
@@ -385,6 +540,22 @@ public class MainAssistantViewModel(
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Navigation to memory failed: {ex}");
+        }
+    }
+
+    private async Task NavigateToDebugAsync()
+    {
+        try
+        {
+            var page = _serviceProvider.GetRequiredService<DebugOverlayPage>();
+            if (Application.Current?.MainPage?.Navigation != null)
+            {
+                await Application.Current.MainPage.Navigation.PushAsync(page);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Navigation to debug failed: {ex}");
         }
     }
 
@@ -457,35 +628,34 @@ public class MainAssistantViewModel(
 
     public async Task InitializeAssetsAsync()
     {
-        try
-        {
-            var prompt = _assetService.GetAestheticPrompt(AssetType.AssistantRingPulsing);
-            AssistantImageSource = await _assetService.GenerateAssetAsync(prompt, "assistant_ring.png");
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Failed to generate assistant ring: {ex.Message}");
-            AssistantImageSource = "dotnet_bot.png";
-            // Non-blocking log only during device testing to avoid modal alert issues via ADB
-            global::Android.Util.Log.Warn("QuantumZ", $"Asset generation skipped: {ex.Message}");
-        }
+        AssistantImageSource = string.Empty;
 
-        await RefreshHudTelemetryAsync();
+        await RefreshHudTelemetryAsync(force: true);
+        if (!_startupMonitorAttempted)
+        {
+            _startupMonitorAttempted = true;
+            await SetListeningAsync(true);
+        }
     }
 
-    private async Task RefreshHudTelemetryAsync()
+    private async Task RefreshHudTelemetryAsync(bool force = false)
     {
         try
         {
-            var models = await _modelRegistry.DiscoverModelsAsync(forceRefresh: false);
+            var models = await _modelRegistry.DiscoverModelsAsync(forceRefresh: force);
             var llmModel = models.FirstOrDefault(model => model.Capability == ProviderCapability.Llm && model.IsAvailable);
             var remoteCount = models.Count(model => model.Location is ProviderLocation.Remote or ProviderLocation.Hybrid);
             var localCount = models.Count(model => model.Location is ProviderLocation.Local or ProviderLocation.BuiltIn);
+            var localServerOnline = await _llamaLocalManager.CheckHealthAsync();
+            var localBinaryAvailable = _llamaLocalManager.IsBinaryAvailable();
+            var selectedModel = FirstNonEmpty(_settingsService.SelectedModelName, _settingsService.LlamaModelId);
+            var selectedProfile = models.FirstOrDefault(model => !string.IsNullOrWhiteSpace(selectedModel) && ModelMatchesSelection(model, selectedModel));
 
-            ActiveModelName = FirstNonEmpty(_settingsService.SelectedModelName, _settingsService.LlamaModelId, llmModel?.DisplayName, "No LLM model selected");
-            ModelEndpointText = FirstNonEmpty(llmModel?.Endpoint, _settingsService.LlmUrl, "No endpoint configured");
-            ServerHealthText = remoteCount > 0 ? "REMOTE SERVER ONLINE" : "LOCAL/OFFLINE MODE";
-            GpuStatusText = remoteCount > 0 ? "GPU SERVER ROUTE READY" : "LOCAL ACCELERATION ROUTE";
+            ActiveModelName = FirstNonEmpty(selectedProfile?.DisplayName, llmModel?.DisplayName, selectedModel, "No reachable LLM model");
+            ModelEndpointText = FirstNonEmpty(selectedProfile?.Endpoint, llmModel?.Endpoint, _settingsService.LlmUrl, localServerOnline ? ModelRegistry.LocalLlamaBaseUrl : "No reachable endpoint");
+            ServerHealthText = remoteCount > 0 ? "REMOTE SERVER ONLINE" : localServerOnline ? "LOCAL LLAMA SERVER ONLINE" : "LLM SERVER OFFLINE";
+            GpuStatusText = remoteCount > 0 ? "GPU SERVER ROUTE READY" : localServerOnline ? "LOCAL CPU ROUTE READY" : localBinaryAvailable ? "LOCAL BINARY READY / SERVER STOPPED" : "LOCAL BINARY MISSING";
+            ConfigVoiceRouteText = $"Wake word: {FirstNonEmpty(_settingsService.WakeWords.FirstOrDefault(), "hey quantum")} • Audio: {_settingsService.AudioRouting} • STT: {(_settingsService.UseOnDeviceStt ? "On-device Whisper" : ShortenEndpoint(_settingsService.SttUrl))}";
 
             ReplaceMetrics(ModelStatusItems,
             [
@@ -506,9 +676,9 @@ public class MainAssistantViewModel(
 
             ReplaceMetrics(ServerTelemetryItems,
             [
-                new HudMetric("Remote Models", remoteCount.ToString(), remoteCount > 0 ? "#00FF88" : "#FFB300"),
-                new HudMetric("Local Models", localCount.ToString(), localCount > 0 ? "#00FF88" : "#AAAAAA"),
-                new HudMetric("Endpoint", ShortenEndpoint(_settingsService.LlmUrl), "#FF003C"),
+                new HudMetric("Remote", remoteCount > 0 ? $"{remoteCount} model(s)" : "Offline", remoteCount > 0 ? "#00FF88" : "#FFB300"),
+                new HudMetric("Local Server", localServerOnline ? "Online" : "Offline", localServerOnline ? "#00FF88" : "#FFB300"),
+                new HudMetric("llama.cpp", localBinaryAvailable ? "Binary installed" : "Binary missing", localBinaryAvailable ? "#00FF88" : "#FF003C"),
                 new HudMetric("Thermal", $"{thermal.Level} ({thermal.BatteryTemperatureC:F1}°C)", thermalColor)
             ]);
         }
@@ -527,6 +697,235 @@ public class MainAssistantViewModel(
         }
     }
 
+    private async Task RefreshServiceHealthAsync() => await RefreshServiceHealthAsync(force: true);
+
+    private async Task RefreshServiceHealthAsync(bool force)
+    {
+        if (_serviceHealthRefreshInFlight)
+            return;
+
+        if (!force && DateTime.UtcNow - _lastServiceHealthRefreshUtc < TimeSpan.FromMinutes(2))
+            return;
+
+        _serviceHealthRefreshInFlight = true;
+        ServiceHealthSummaryText = "Running service smoke tests...";
+        ReplaceServiceHealth([
+            ServiceHealthMetric.Checking("LLM", "Testing server and response path"),
+            ServiceHealthMetric.Checking("STT", "Checking selected speech-to-text provider"),
+            ServiceHealthMetric.Checking("TTS", "Checking selected speech output provider"),
+            ServiceHealthMetric.Checking("VAD", "Checking voice activity detector"),
+            ServiceHealthMetric.Checking("MCP", "Discovering agent tools"),
+            ServiceHealthMetric.Checking("Memory", "Reading memory vault")
+        ]);
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+            var checks = await Task.WhenAll(
+                CheckLlmHealthAsync(timeout.Token),
+                CheckProviderHealthAsync("STT", ProviderCapability.Stt, provider => $"{provider.Descriptor.DisplayName} available", timeout.Token),
+                CheckProviderHealthAsync("TTS", ProviderCapability.Tts, provider => $"{provider.Descriptor.DisplayName} available", timeout.Token),
+                CheckVadHealthAsync(timeout.Token),
+                CheckMcpHealthAsync(timeout.Token),
+                CheckMemoryHealthAsync(timeout.Token));
+
+            ReplaceServiceHealth(checks);
+            _lastServiceHealthRefreshUtc = DateTime.UtcNow;
+
+            var passCount = checks.Count(check => check.State == ServiceHealthState.Ready);
+            var partialCount = checks.Count(check => check.State == ServiceHealthState.Partial);
+            var llm = checks.FirstOrDefault(check => check.Label == "LLM");
+            if (llm is not null)
+            {
+                StatusColor = llm.State switch
+                {
+                    ServiceHealthState.Ready => "#00FF88",
+                    ServiceHealthState.Partial => "#FFB300",
+                    ServiceHealthState.Failed => "#FF003C",
+                    _ => StatusColor
+                };
+
+                AiStatusText = llm.State switch
+                {
+                    ServiceHealthState.Ready => "LLM Verified",
+                    ServiceHealthState.Partial => "LLM Link Ready",
+                    ServiceHealthState.Failed => "LLM Offline",
+                    _ => AiStatusText
+                };
+            }
+
+            ServiceHealthSummaryText = partialCount > 0
+                ? $"{passCount}/{checks.Length} verified, {partialCount} awaiting functional response"
+                : $"{passCount}/{checks.Length} services verified";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Service health refresh failed: {ex}");
+            ServiceHealthSummaryText = "Health checks degraded";
+            ReplaceServiceHealth([
+                ServiceHealthMetric.Failed("Health", $"Smoke tests failed: {ex.Message}")
+            ]);
+        }
+        finally
+        {
+            _serviceHealthRefreshInFlight = false;
+            await RefreshHudTelemetryAsync(force: true);
+        }
+    }
+
+    private async Task<ServiceHealthMetric> CheckLlmHealthAsync(CancellationToken ct)
+    {
+        try
+        {
+            var models = await _modelRegistry.GetModelsAsync(ProviderCapability.Llm, ct);
+            var selectedModel = FirstNonEmpty(_settingsService.SelectedModelName, _settingsService.LlamaModelId);
+            var candidate = models.FirstOrDefault(model => model.IsAvailable && (string.IsNullOrWhiteSpace(selectedModel)
+                || string.Equals(model.Id, selectedModel, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(model.DisplayName, selectedModel, StringComparison.OrdinalIgnoreCase)))
+                ?? models.FirstOrDefault(model => model.IsAvailable);
+
+            if (candidate is null)
+                return ServiceHealthMetric.Failed("LLM", "No reachable model list from configured endpoint");
+
+            var request = new AiRequest(
+                "this is a test message respond \"ok\".",
+                Temperature: 0,
+                MaxTokens: 16,
+                EnableToolCalling: false);
+            var response = await _aiClient.SendPromptAsync(request, ct);
+
+            return string.IsNullOrWhiteSpace(response.Content)
+                ? ServiceHealthMetric.Partial("LLM", $"Models loaded from {ShortenEndpoint(candidate.Endpoint)}, response pending")
+                : ServiceHealthMetric.Ready("LLM", $"Response verified: {TrimForMetric(response.Content)}");
+        }
+        catch (OperationCanceledException)
+        {
+            return ServiceHealthMetric.Partial("LLM", "Model endpoint reachable check timed out before response");
+        }
+        catch (Exception ex)
+        {
+            return ServiceHealthMetric.Failed("LLM", TrimForMetric(ex.Message));
+        }
+    }
+
+    private async Task<ServiceHealthMetric> CheckProviderHealthAsync(string label, ProviderCapability capability, Func<IProvider, string> successMessage, CancellationToken ct)
+    {
+        try
+        {
+            IProvider provider = capability switch
+            {
+                ProviderCapability.Stt => await _providerRouter.ResolveSttProviderAsync(ct),
+                ProviderCapability.Tts => await _providerRouter.ResolveTtsProviderAsync(ct),
+                _ => throw new ArgumentOutOfRangeException(nameof(capability), capability, null)
+            };
+
+            return ServiceHealthMetric.Ready(label, successMessage(provider));
+        }
+        catch (OperationCanceledException)
+        {
+            return ServiceHealthMetric.Partial(label, "Provider availability check timed out");
+        }
+        catch (Exception ex)
+        {
+            return ServiceHealthMetric.Failed(label, TrimForMetric(ex.Message));
+        }
+    }
+
+    private async Task<ServiceHealthMetric> CheckVadHealthAsync(CancellationToken ct)
+    {
+        try
+        {
+            var buffer = new byte[3200];
+            var result = await _providerRouter.DetectSpeechAsync(buffer, 16000, ct);
+            return ServiceHealthMetric.Ready("VAD", $"Smoke test returned {result.ActivityState}");
+        }
+        catch (OperationCanceledException)
+        {
+            return ServiceHealthMetric.Partial("VAD", "Detector check timed out");
+        }
+        catch (Exception ex)
+        {
+            return ServiceHealthMetric.Failed("VAD", TrimForMetric(ex.Message));
+        }
+    }
+
+    private async Task<ServiceHealthMetric> CheckMcpHealthAsync(CancellationToken ct)
+    {
+        try
+        {
+            if (_settingsService.McpServers.Count == 0)
+                return ServiceHealthMetric.Unconfigured("MCP", "No MCP servers configured");
+
+            var tools = await _mcpOrchestrator.DiscoverToolsAsync(ct);
+            return ServiceHealthMetric.Ready("MCP", $"{tools.Count} tool(s) discovered");
+        }
+        catch (OperationCanceledException)
+        {
+            return ServiceHealthMetric.Partial("MCP", "Tool discovery timed out");
+        }
+        catch (Exception ex)
+        {
+            return ServiceHealthMetric.Failed("MCP", TrimForMetric(ex.Message));
+        }
+    }
+
+    private async Task<ServiceHealthMetric> CheckMemoryHealthAsync(CancellationToken ct)
+    {
+        try
+        {
+            var end = DateTime.UtcNow;
+            var summaries = await _memoryService.GetSummariesAsync(end.AddDays(-7), end);
+            var vault = string.IsNullOrWhiteSpace(_memoryService.LocalVaultPath) ? "vault path not configured" : ShortenPath(_memoryService.LocalVaultPath);
+            return ServiceHealthMetric.Ready("Memory", $"{summaries.Count} summaries; {vault}");
+        }
+        catch (OperationCanceledException)
+        {
+            return ServiceHealthMetric.Partial("Memory", "Vault read timed out");
+        }
+        catch (Exception ex)
+        {
+            return ServiceHealthMetric.Failed("Memory", TrimForMetric(ex.Message));
+        }
+    }
+
+    private async Task RefreshMemoryTelemetryAsync()
+    {
+        try
+        {
+            var end = DateTime.UtcNow;
+            var start = end.AddDays(-7);
+            var summaries = await _memoryService.GetSummariesAsync(start, end);
+            var latest = summaries.OrderByDescending(summary => summary.Date).FirstOrDefault();
+
+            MemorySummaryCountText = $"{summaries.Count} ITEMS";
+            MemoryVaultPathText = string.IsNullOrWhiteSpace(_memoryService.LocalVaultPath)
+                ? "Vault path not configured"
+                : _memoryService.LocalVaultPath;
+            LastMemorySummaryText = latest is null
+                ? "No recent summaries found in the local memory vault."
+                : $"{latest.Date:yyyy-MM-dd}: {latest.SummaryText}";
+
+            ReplaceMetrics(MemoryStatusItems,
+            [
+                new HudMetric("Vault", string.IsNullOrWhiteSpace(_memoryService.LocalVaultPath) ? "Not configured" : "Configured", string.IsNullOrWhiteSpace(_memoryService.LocalVaultPath) ? "#FFB300" : "#00FF88"),
+                new HudMetric("Window", "Last 7 days", "#FF335F"),
+                new HudMetric("Summaries", summaries.Count.ToString(), summaries.Count > 0 ? "#00FF88" : "#AAAAAA"),
+                new HudMetric("Logging", _settingsService.EnableActivityLogging ? "Enabled" : "Disabled", _settingsService.EnableActivityLogging ? "#00FF88" : "#FFB300")
+            ]);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Memory telemetry refresh failed: {ex}");
+            MemorySummaryCountText = "DEGRADED";
+            LastMemorySummaryText = "Memory telemetry is unavailable. Open the memory vault for full diagnostics.";
+            ReplaceMetrics(MemoryStatusItems,
+            [
+                new HudMetric("Vault", "Unavailable", "#FFB300"),
+                new HudMetric("Logging", _settingsService.EnableActivityLogging ? "Enabled" : "Disabled", "#FFB300")
+            ]);
+        }
+    }
+
     private static void ReplaceMetrics(ObservableCollection<HudMetric> target, IEnumerable<HudMetric> values)
     {
         MainThread.BeginInvokeOnMainThread(() =>
@@ -535,6 +934,18 @@ public class MainAssistantViewModel(
             foreach (var value in values)
             {
                 target.Add(value);
+            }
+        });
+    }
+
+    private void ReplaceServiceHealth(IEnumerable<ServiceHealthMetric> values)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            ServiceHealthItems.Clear();
+            foreach (var value in values)
+            {
+                ServiceHealthItems.Add(value);
             }
         });
     }
@@ -552,8 +963,29 @@ public class MainAssistantViewModel(
             : $"{uri.Authority}{uri.PathAndQuery}";
     }
 
+    private static string ShortenPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "Not set";
+
+        var normalized = path.Trim().Replace('\\', '/');
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length <= 2 ? normalized : $".../{parts[^2]}/{parts[^1]}";
+    }
+
+    private static string TrimForMetric(string value)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(value) ? "No detail returned" : value.Trim().ReplaceLineEndings(" ");
+        return trimmed.Length <= 80 ? trimmed : $"{trimmed[..77]}...";
+    }
+
     private static string FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
+
+    private static bool ModelMatchesSelection(ModelProfile model, string selection) =>
+        string.Equals(model.Id, selection, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(model.DisplayName, selection, StringComparison.OrdinalIgnoreCase)
+        || string.Equals($"{model.Provider}:{model.Id}", selection, StringComparison.OrdinalIgnoreCase);
 
     private static async ValueTask<bool> EnsureMicrophonePermissionAsync()
     {
@@ -585,12 +1017,12 @@ public class MainAssistantViewModel(
         }
     }
 
-    private static void StartMicrophoneService()
+    private void StartMicrophoneService()
     {
         try
         {
 #if ANDROID
-            global::Android.Util.Log.Info("QuantumZ", "Starting MicrophoneForegroundService from UI.");
+            _debugLogger.Log("MainAssistant", "Starting MicrophoneForegroundService from UI.");
             var context = global::Android.App.Application.Context;
             var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
             if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.O)
@@ -606,13 +1038,14 @@ public class MainAssistantViewModel(
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Failed to start MicrophoneForegroundService: {ex}");
+            _debugLogger.Log("MainAssistant", $"Failed to start microphone service: {ex.Message}", LogLevel.Error);
         }
     }
 
-    private static void StopMicrophoneService()
+    private void StopMicrophoneService()
     {
 #if ANDROID
-        global::Android.Util.Log.Info("QuantumZ", "Stopping MicrophoneForegroundService from UI.");
+        _debugLogger.Log("MainAssistant", "Stopping MicrophoneForegroundService from UI.");
         var context = global::Android.App.Application.Context;
         var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
         context.StopService(intent);
@@ -648,3 +1081,28 @@ public class MainAssistantViewModel(
 }
 
 public sealed record HudMetric(string Label, string Value, string AccentColor);
+
+public enum ServiceHealthState
+{
+    Unknown,
+    Checking,
+    Unconfigured,
+    Partial,
+    Ready,
+    Failed
+}
+
+public sealed record ServiceHealthMetric(string Label, string Value, string AccentColor, ServiceHealthState State)
+{
+    public bool IsPulsing => State is ServiceHealthState.Checking or ServiceHealthState.Partial;
+
+    public static ServiceHealthMetric Checking(string label, string value) => new(label, value, "#FFB300", ServiceHealthState.Checking);
+
+    public static ServiceHealthMetric Unconfigured(string label, string value) => new(label, value, "#9A9A9A", ServiceHealthState.Unconfigured);
+
+    public static ServiceHealthMetric Partial(string label, string value) => new(label, value, "#FFB300", ServiceHealthState.Partial);
+
+    public static ServiceHealthMetric Ready(string label, string value) => new(label, value, "#00FF88", ServiceHealthState.Ready);
+
+    public static ServiceHealthMetric Failed(string label, string value) => new(label, value, "#FF003C", ServiceHealthState.Failed);
+}

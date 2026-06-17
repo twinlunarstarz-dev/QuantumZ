@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.Storage;
 using QuantumZ.Core.Interfaces;
@@ -12,6 +13,7 @@ namespace QuantumZ.Infrastructure.Services
         private const string BinaryId = "llama-server";
         private const string LocalUrl = "http://localhost:8025";
         private const int LocalPort = 8025;
+        private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
         private bool _isRunning;
 
         public bool IsServerRunning
@@ -26,6 +28,27 @@ namespace QuantumZ.Infrastructure.Services
         {
             debugLogger.Log("LlamaLocalManager", "Ensuring local llama server is running...");
 
+            await _lifecycleGate.WaitAsync();
+            try
+            {
+                return await EnsureServerRunningCoreAsync();
+            }
+            finally
+            {
+                _lifecycleGate.Release();
+            }
+        }
+
+        private async ValueTask<bool> EnsureServerRunningCoreAsync()
+        {
+            var modelPath = ResolveModelPath();
+            if (string.IsNullOrWhiteSpace(modelPath))
+            {
+                debugLogger.Log("LlamaLocalManager", "Local llama server is disabled because no local GGUF model was found in AppData/models/llm or selected as an absolute model path.");
+                IsServerRunning = false;
+                return false;
+            }
+
             try
             {
                 await binaryManager.EnsureBinaryAsync(BinaryId);
@@ -33,6 +56,7 @@ namespace QuantumZ.Infrastructure.Services
             catch (Exception ex)
             {
                 debugLogger.Log("LlamaLocalManager", $"Failed to ensure llama-server binary: {ex.Message}");
+                IsServerRunning = false;
                 return false;
             }
 
@@ -96,7 +120,6 @@ namespace QuantumZ.Infrastructure.Services
                     debugLogger.Log("LlamaLocalManager", $"Selected local model is not clearly Q4 quantized: {modelPath}");
 
                 var command = string.Join(' ',
-                    "nohup",
                     ShellQuote(binaryPath),
                     "-m", ShellQuote(modelPath),
                     "--host", "127.0.0.1",
@@ -145,20 +168,27 @@ namespace QuantumZ.Infrastructure.Services
                 .First();
         }
 
-        private async ValueTask<bool> CheckHealthAsync()
+        public async ValueTask<bool> CheckHealthAsync(CancellationToken ct = default)
         {
             try
             {
-                using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-                using var response = await client.GetAsync($"{LocalUrl}/health");
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(2));
+                using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                using var response = await client.GetAsync($"{LocalUrl}/health", cts.Token);
                 if (response.IsSuccessStatusCode)
+                {
+                    IsServerRunning = true;
                     return true;
+                }
 
-                using var modelsResponse = await client.GetAsync($"{LocalUrl}/v1/models");
-                return modelsResponse.IsSuccessStatusCode;
+                using var modelsResponse = await client.GetAsync($"{LocalUrl}/v1/models", cts.Token);
+                IsServerRunning = modelsResponse.IsSuccessStatusCode;
+                return IsServerRunning;
             }
             catch
             {
+                IsServerRunning = false;
                 return false;
             }
         }

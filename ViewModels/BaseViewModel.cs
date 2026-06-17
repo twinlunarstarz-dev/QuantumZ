@@ -13,12 +13,14 @@ public abstract class BaseViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    protected void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (!EqualityComparer<T>.Default.Equals(field, value))
         {
             field = value;
             OnPropertyChanged(propertyName);
+            return true;
         }
+        return false;
     }
 }

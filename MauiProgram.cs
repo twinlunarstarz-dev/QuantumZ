@@ -24,10 +24,12 @@ public static class MauiProgram
         builder.Services.AddTransient<MainAssistantPage>();
         builder.Services.AddTransient<SettingsPage>();
         builder.Services.AddTransient<MemoryPage>();
+        builder.Services.AddTransient<DebugOverlayPage>();
 
-        builder.Services.AddTransient<MainAssistantViewModel>();
-        builder.Services.AddTransient<SettingsViewModel>();
-        builder.Services.AddTransient<MemoryViewModel>();
+        builder.Services.AddSingleton<MainAssistantViewModel>();
+        builder.Services.AddSingleton<SettingsViewModel>();
+        builder.Services.AddSingleton<MemoryViewModel>();
+        builder.Services.AddSingleton<DebugViewModel>();
 
 #if DEBUG
         builder.Logging.AddDebug();

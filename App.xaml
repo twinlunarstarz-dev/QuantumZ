@@ -14,6 +14,8 @@
             <conv:InvertedBoolConverter x:Key="InvertedBoolConverter" />
             <conv:HexToColorConverter x:Key="HexToColorConverter" />
             <conv:BoolToListenTextConverter x:Key="BoolToListenTextConverter" />
+            <conv:IntGreaterThanZeroConverter x:Key="IntGreaterThanZeroConverter" />
+            <conv:ListToBulletConverter x:Key="ListToBulletConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

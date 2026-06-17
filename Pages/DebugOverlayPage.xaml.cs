@@ -1,6 +1,6 @@
-using QuantumZ.ViewModels;
+using QuantumZ.UI.ViewModels;
 
-namespace QuantumZ.Pages;
+namespace QuantumZ.UI.Pages;
 
 public partial class DebugOverlayPage : ContentPage
 {

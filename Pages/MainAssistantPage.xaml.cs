@@ -4,9 +4,19 @@ namespace QuantumZ.UI.Pages;
 
 public partial class MainAssistantPage : ContentPage
 {
+    private enum HudPanelMode
+    {
+        None,
+        Detail,
+        Memory,
+        Config
+    }
+
     private CancellationTokenSource? _pulseCancellation;
     private CancellationTokenSource? _waveformCancellation;
     private bool _visualizerEventsAttached;
+    private readonly SemaphoreSlim _panelTransitionSemaphore = new(1, 1);
+    private HudPanelMode _currentPanelMode = HudPanelMode.None;
 
     public MainAssistantPage(MainAssistantViewModel viewModel)
     {
@@ -15,10 +25,27 @@ public partial class MainAssistantPage : ContentPage
 
         viewModel.PropertyChanged += (s, e) =>
         {
-            if (e.PropertyName == nameof(MainAssistantViewModel.IsDetailViewOpen))
+            var vm = (MainAssistantViewModel)s!;
+            if (e.PropertyName == nameof(MainAssistantViewModel.IsDetailViewOpen) && vm.IsDetailViewOpen)
             {
-                var vm = (MainAssistantViewModel)s!;
-                _ = TransitionToDetailAsync(vm.IsDetailViewOpen);
+                _ = TransitionToPanelAsync(HudPanelMode.Detail);
+            }
+            else if (e.PropertyName == nameof(MainAssistantViewModel.IsMemoryViewOpen) && vm.IsMemoryViewOpen)
+            {
+                _ = TransitionToPanelAsync(HudPanelMode.Memory);
+            }
+            else if (e.PropertyName == nameof(MainAssistantViewModel.IsConfigViewOpen) && vm.IsConfigViewOpen)
+            {
+                _ = TransitionToPanelAsync(HudPanelMode.Config);
+            }
+            else if ((e.PropertyName == nameof(MainAssistantViewModel.IsDetailViewOpen)
+                    || e.PropertyName == nameof(MainAssistantViewModel.IsMemoryViewOpen)
+                    || e.PropertyName == nameof(MainAssistantViewModel.IsConfigViewOpen))
+                    && !vm.IsDetailViewOpen
+                    && !vm.IsMemoryViewOpen
+                    && !vm.IsConfigViewOpen)
+            {
+                _ = TransitionToPanelAsync(HudPanelMode.None);
             }
         };
     }
@@ -53,7 +80,23 @@ public partial class MainAssistantPage : ContentPage
             vm.DetachVisualizerEvents();
             _visualizerEventsAttached = false;
         }
+
         base.OnDisappearing();
+    }
+    protected override bool OnBackButtonPressed()
+    {
+        if (BindingContext is MainAssistantViewModel vm && vm.ClosePanels())
+            return true;
+
+        return base.OnBackButtonPressed();
+    }
+
+    private void ListeningSwitch_Toggled(object? sender, ToggledEventArgs e)
+    {
+        if (BindingContext is not MainAssistantViewModel vm || vm.IsListening == e.Value)
+            return;
+
+        _ = vm.SetListeningAsync(e.Value);
     }
 
     private void StartPulseAnimation()
@@ -116,31 +159,76 @@ public partial class MainAssistantPage : ContentPage
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
     }
-    private async Task TransitionToDetailAsync(bool isOpen)
+    private async Task TransitionToPanelAsync(HudPanelMode mode)
     {
-        if (isOpen)
-        {
-            await Task.WhenAll(
-                FocusContainer.ScaleTo(0.92, 400, Easing.CubicOut),
-                FocusContainer.TranslateTo(0, -20, 400, Easing.CubicOut)
-            );
+        if (!await _panelTransitionSemaphore.WaitAsync(0).ConfigureAwait(true))
+            return;
 
-            await Task.WhenAll(
-                DetailPanel.TranslateTo(0, 0, 500, Easing.CubicOut),
-                DetailPanel.FadeTo(1, 500, Easing.CubicOut)
-            );
+        try
+        {
+            if (_currentPanelMode == mode)
+                return;
+
+            _currentPanelMode = mode;
+            var target = mode switch
+            {
+                HudPanelMode.Detail => DetailPanel,
+                HudPanelMode.Memory => MemoryPanel,
+                HudPanelMode.Config => ConfigPanel,
+                _ => null
+            };
+
+            var panels = new[] { DetailPanel, MemoryPanel, ConfigPanel };
+
+            if (target is not null)
+            {
+                PanelOverlay.InputTransparent = false;
+                await Task.WhenAll(
+                    PanelOverlay.FadeTo(1.0, 220, Easing.CubicOut),
+                    FocusContainer.FadeTo(0.18, 260, Easing.CubicOut),
+                    FocusContainer.ScaleTo(0.96, 260, Easing.CubicOut),
+                    FocusContainer.TranslateTo(0, -10, 260, Easing.CubicOut)
+                );
+                FocusContainer.InputTransparent = true;
+
+                foreach (var panel in panels.Where(panel => panel != target))
+                {
+                    panel.Opacity = 0;
+                    panel.TranslationY = 80;
+                    panel.InputTransparent = true;
+                }
+
+                target.InputTransparent = false;
+                await Task.WhenAll(
+                    target.TranslateTo(0, 0, 500, Easing.CubicOut),
+                    target.FadeTo(1, 500, Easing.CubicOut)
+                );
+            }
+            else
+            {
+                await Task.WhenAll(panels.Select(panel => Task.WhenAll(
+                    panel.TranslateTo(0, 80, 300, Easing.CubicIn),
+                    panel.FadeTo(0, 360, Easing.CubicIn))));
+
+                foreach (var panel in panels)
+                {
+                    panel.InputTransparent = true;
+                }
+                PanelOverlay.InputTransparent = true;
+
+                FocusContainer.InputTransparent = false;
+
+                await Task.WhenAll(
+                    PanelOverlay.FadeTo(0, 220, Easing.CubicIn),
+                    FocusContainer.FadeTo(1.0, 320, Easing.CubicOut),
+                    FocusContainer.ScaleTo(1.0, 360, Easing.CubicOut),
+                    FocusContainer.TranslateTo(0, 0, 360, Easing.CubicOut)
+                );
+            }
         }
-        else
+        finally
         {
-            await Task.WhenAll(
-                DetailPanel.TranslateTo(0, 500, 400, Easing.CubicIn),
-                DetailPanel.FadeTo(0, 400, Easing.CubicIn)
-            );
-
-            await Task.WhenAll(
-                FocusContainer.ScaleTo(1.0, 400, Easing.CubicOut),
-                FocusContainer.TranslateTo(0, 0, 400, Easing.CubicOut)
-            );
+            _panelTransitionSemaphore.Release();
         }
     }
 }

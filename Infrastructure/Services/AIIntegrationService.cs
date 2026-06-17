@@ -2,7 +2,7 @@ using QuantumZ.Core.Interfaces;
 
 namespace QuantumZ.Infrastructure.Services;
 
-public class AIIntegrationService(IAIClient aiClient, IMcpOrchestrator mcpOrchestrator)
+public class AIIntegrationService(IAIClient aiClient, IMcpOrchestrator mcpOrchestrator) : IAIIntegrationService
 {
     private const int MaxIterations = 6;
 
