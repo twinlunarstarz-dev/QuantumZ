@@ -21,7 +21,7 @@ public sealed class WhisperModelDownloader(HttpClient httpClient, ISettingsServi
             return configured;
 
         // Determine filename based on selected model ID
-        var fileName = settings.SttModelId?.Trim() switch
+        var fileName = settings.GetActiveProvider("STT")?.ModelId?.Trim() switch
         {
             "whisper-tiny" => "ggml-tiny.bin",
             "whisper-small" => "ggml-small.bin",
@@ -54,7 +54,7 @@ public sealed class WhisperModelDownloader(HttpClient httpClient, ISettingsServi
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        var modelUrl = settings.SttModelId?.Trim() switch
+        var modelUrl = settings.GetActiveProvider("STT")?.ModelId?.Trim() switch
         {
             "whisper-tiny" => "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
             "whisper-small" => "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",

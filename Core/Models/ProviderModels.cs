@@ -102,3 +102,16 @@ public sealed record VadActivityEventArgs(
     VadActivityState State,
     VadResult Result,
     DateTimeOffset Timestamp);
+
+/// <summary>
+/// Describes a single MCP tool definition surfaced to the LLM during a request.
+/// This is a lightweight, LLM-facing projection of <see cref="QuantumZ.Core.Interfaces.McpTool"/>
+/// that omits server-routing metadata not relevant to the model.
+/// </summary>
+/// <param name="Name">Unique tool name the LLM must use when invoking this tool.</param>
+/// <param name="Description">Human-readable description of what the tool does.</param>
+/// <param name="InputSchemaJson">JSON Schema string describing the tool's input parameters, or <c>null</c> for parameter-less tools.</param>
+public sealed record McpToolDefinition(
+    string Name,
+    string Description,
+    string? InputSchemaJson = null);

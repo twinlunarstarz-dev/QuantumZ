@@ -1,21 +1,56 @@
 using QuantumZ.Core.Interfaces;
+using QuantumZ.Core.Models;
 
 namespace QuantumZ.Infrastructure.Services;
 
-public class AIIntegrationService(IAIClient aiClient, IMcpOrchestrator mcpOrchestrator) : IAIIntegrationService
+public class AIIntegrationService(
+    IAIClient aiClient,
+    IMcpOrchestrator mcpOrchestrator,
+    ISettingsService settingsService) : IAIIntegrationService
 {
     private const int MaxIterations = 6;
 
     public async ValueTask<string> ExecutePromptAsync(AiRequest request, CancellationToken ct = default)
     {
-        var currentHistory = new List<ChatMessage>(request.History);
-        if (!string.IsNullOrWhiteSpace(request.Prompt))
-            currentHistory.Add(new ChatMessage("user", request.Prompt));
+        // Resolve system prompt: explicit caller value wins, then VoiceAssistantSettings default.
+        var resolvedSystemPrompt = !string.IsNullOrWhiteSpace(request.SystemPrompt)
+            ? request.SystemPrompt
+            : settingsService.VoiceAssistantSettings.SystemPrompt;
+
+        // Discover MCP tools once per request when tool calling is active and the
+        // caller has not already pre-supplied a tool list.
+        IReadOnlyList<McpToolDefinition>? resolvedTools = request.AvailableTools;
+        if (request.EnableToolCalling && resolvedTools is not { Count: > 0 })
+        {
+            try
+            {
+                var discovered = await mcpOrchestrator.DiscoverToolsAsync(ct);
+                if (discovered.Count > 0)
+                    resolvedTools = [.. discovered.Select(t => new McpToolDefinition(t.Name, t.Description, t.InputSchemaJson))];
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Non-fatal: continue without MCP tools
+                _ = ex.Message; // reference to satisfy TreatWarningsAsErrors
+            }
+        }
+
+        // Build a single enriched request so every iteration of the tool loop carries
+        // both the resolved system prompt and the pre-discovered tool list.
+        var enrichedRequest = request with
+        {
+            SystemPrompt = resolvedSystemPrompt,
+            AvailableTools = resolvedTools
+        };
+
+        var currentHistory = new List<ChatMessage>(enrichedRequest.History);
+        if (!string.IsNullOrWhiteSpace(enrichedRequest.Prompt))
+            currentHistory.Add(new ChatMessage("user", enrichedRequest.Prompt));
 
         for (var iteration = 0; iteration < MaxIterations; iteration++)
         {
             ct.ThrowIfCancellationRequested();
-            var aiRequest = request with { Prompt = string.Empty, History = currentHistory };
+            var aiRequest = enrichedRequest with { Prompt = string.Empty, History = currentHistory };
             var response = await aiClient.SendPromptAsync(aiRequest, ct);
 
             if (response.ToolCalls is not { Count: > 0 })
@@ -45,7 +80,7 @@ public class AIIntegrationService(IAIClient aiClient, IMcpOrchestrator mcpOrches
             }
         }
 
-        var finalRequest = request with { Prompt = string.Empty, History = currentHistory, EnableToolCalling = false };
+        var finalRequest = enrichedRequest with { Prompt = string.Empty, History = currentHistory, EnableToolCalling = false };
         var finalResponse = await aiClient.SendPromptAsync(finalRequest, ct);
         return string.IsNullOrWhiteSpace(finalResponse.Content)
             ? "I could not produce a final response from the available tool results."

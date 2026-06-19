@@ -117,7 +117,14 @@ public sealed class ProviderRouter(
             }
         }
 
-        throw new InvalidOperationException($"No available {capability} provider was found.");
+        var activeConfig = settings.GetActiveProvider(capability.ToString());
+        if (activeConfig == null)
+        {
+            debugLogger.Log("ProviderRouter", $"Critical: No active configuration for {capability}. Check Settings page.", LogLevel.Error);
+            throw new InvalidOperationException($"No available {capability} provider was found because no active configuration is set.");
+        }
+
+        throw new InvalidOperationException($"No available {capability} provider was found, although '{activeConfig.Name}' is configured as active.");
     }
 
     private async ValueTask<TResult> ExecuteWithFallbackAsync<TProvider, TResult>(
@@ -152,7 +159,14 @@ public sealed class ProviderRouter(
             }
         }
 
-        throw new InvalidOperationException($"All {capability} providers failed or were unavailable.", lastError);
+        var activeConfig = settings.GetActiveProvider(capability.ToString());
+        if (activeConfig == null)
+        {
+            debugLogger.Log("ProviderRouter", $"Critical: No active configuration for {capability}. Check Settings page.", LogLevel.Error);
+            throw new InvalidOperationException($"All {capability} providers failed or were unavailable, and no active provider is configured.", lastError);
+        }
+
+        throw new InvalidOperationException($"All {capability} providers failed or were unavailable. Active provider '{activeConfig.Name}' also failed.", lastError);
     }
 
     private static List<TProvider> SortProviders<TProvider>(IEnumerable<TProvider> providers)
@@ -176,7 +190,7 @@ public sealed class ProviderRouter(
         if (capability != ProviderCapability.Tts)
             return SortProviders(providerList);
 
-        var selectedModel = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Tts, settings.TtsModelId, ct);
+        var selectedModel = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Tts, settings.GetActiveProvider("TTS")?.ModelId ?? "", ct);
         return [.. providerList
             .OrderBy(provider => IsSelectedTtsLocation(provider, selectedModel) ? -1 : GetLocationRank(provider.Descriptor.Capability, provider.Descriptor.Location))
             .ThenBy(provider => provider.Descriptor.Priority)

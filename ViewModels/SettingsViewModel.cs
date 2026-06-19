@@ -1,389 +1,339 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using Microsoft.Maui.Graphics;
 using QuantumZ.Core.Interfaces;
 using QuantumZ.Core.Models;
 using QuantumZ.Core.Models.Settings;
-using QuantumZ.Infrastructure.Services;
 
 namespace QuantumZ.UI.ViewModels;
 
-public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, IDialogService dialogService, WhisperModelDownloader whisperDownloader, IDebugLogger debugLogger) : BaseViewModel
+public sealed partial class SettingsViewModel(ISettingsService settingsService, IDebugLogger logger) : BaseViewModel
 {
-    private readonly ISettingsService _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-    private readonly IAIClient _aiClient = aiClient ?? throw new ArgumentNullException(nameof(aiClient));
-    private readonly IDialogService _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
-    private readonly WhisperModelDownloader _whisperDownloader = whisperDownloader ?? throw new ArgumentNullException(nameof(whisperDownloader));
-    private readonly IDebugLogger _debugLogger = debugLogger ?? throw new ArgumentNullException(nameof(debugLogger));
-    private CancellationTokenSource? _modelRefreshDebounce;
-    private bool _suppressModelRefresh;
+    private readonly ISettingsService _settingsService = settingsService;
+    private readonly IDebugLogger _logger = logger;
 
-    private bool _useLocalLlm;
-    public bool UseLocalLlm
-    {
-        get => _useLocalLlm;
-        set => SetProperty(ref _useLocalLlm, value);
-    }
+    private static readonly Color AccentColor = Color.FromArgb("#FF0000");
+    private static readonly Color InactiveColor = Color.FromArgb("#2A2A2A");
+    private static readonly Color ActiveTextColor = Colors.White;
+    private static readonly Color InactiveTextColor = Color.FromArgb("#888888");
 
-    private bool _useLocalTts;
-    public bool UseLocalTts
-    {
-        get => _useLocalTts;
-        set => SetProperty(ref _useLocalTts, value);
-    }
+    public static readonly IReadOnlyList<string> AudioOutputOptions =
+        ["Auto", "Speaker", "Bluetooth", "Headset"];
 
-    private bool _showAdvancedNetworkSettings;
-    public bool ShowAdvancedNetworkSettings
-    {
-        get => _showAdvancedNetworkSettings;
-        set => SetProperty(ref _showAdvancedNetworkSettings, value);
-    }
-
-    // Provider Management Properties
-    private ServiceProviderSettings _llmSettings = new (ActiveProviderName: "LLM-Primary", Providers: []);
-    public ServiceProviderSettings LlmSettings
-    {
-        get => _llmSettings;
-        set => SetProperty(ref _llmSettings, value);
-    }
-
-    private ServiceProviderSettings _vadSettings = new (ActiveProviderName: "VAD-Primary", Providers: []);
-    public ServiceProviderSettings VadSettings
-    {
-        get => _vadSettings;
-        set => SetProperty(ref _vadSettings, value);
-    }
-
-    private ServiceProviderSettings _sttSettings = new (ActiveProviderName: "STT-Primary", Providers: []);
-    public ServiceProviderSettings SttSettings
-    {
-        get => _sttSettings;
-        set => SetProperty(ref _sttSettings, value);
-    }
-
-    private ServiceProviderSettings _ttsSettings = new (ActiveProviderName: "TTS-Primary", Providers: []);
-    public ServiceProviderSettings TtsSettings
-    {
-        get => _ttsSettings;
-        set => SetProperty(ref _ttsSettings, value);
-    }
-
-    // Active Provider Helpers for UI Binding
-    public ProviderConfig? SelectedLlmProvider => LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName);
-    public ProviderConfig? SelectedVadProvider => VadSettings.Providers.FirstOrDefault(p => p.Name == VadSettings.ActiveProviderName);
-    public ProviderConfig? SelectedSttProvider => SttSettings.Providers.FirstOrDefault(p => p.Name == SttSettings.ActiveProviderName);
-    public ProviderConfig? SelectedTtsProvider => TtsSettings.Providers.FirstOrDefault(p => p.Name == TtsSettings.ActiveProviderName);
-
-    // Helper to update active provider and notify UI
-    private void UpdateActiveProvider(string service, string providerName)
-    {
-        switch (service)
-        {
-            case "LLM": LlmSettings = LlmSettings with { ActiveProviderName = providerName }; break;
-            case "VAD": VadSettings = VadSettings with { ActiveProviderName = providerName }; break;
-            case "STT": SttSettings = SttSettings with { ActiveProviderName = providerName }; break;
-            case "TTS": TtsSettings = TtsSettings with { ActiveProviderName = providerName }; break;
-        }
-        OnPropertyChanged(nameof(SelectedLlmProvider));
-        OnPropertyChanged(nameof(SelectedVadProvider));
-        OnPropertyChanged(nameof(SelectedSttProvider));
-        OnPropertyChanged(nameof(SelectedTtsProvider));
-    }
-
-    // Properties for editing the currently selected provider's details (used by UI)
-
-    public ObservableCollection<string> Services { get; } = ["LLM", "VAD", "STT", "TTS"];
-
-    private string _selectedService = "LLM";
-    public string SelectedService
-    {
-        get => _selectedService;
-        set
-        {
-            if (SetProperty(ref _selectedService, value))
-            {
-                OnPropertyChanged(nameof(GetCurrentProvider));
-                OnPropertyChanged(nameof(CurrentProviders));
-                OnPropertyChanged(nameof(SelectedProviderName));
-            }
-        }
-    }
-
-    public List<string> CurrentProviders => GetCurrentSettings()?.Providers.Select(p => p.Name).ToList() ?? [];
-
-    private string _selectedProviderName = string.Empty;
-    public string SelectedProviderName
-    {
-        get => _selectedProviderName;
-        set
-        {
-            if (SetProperty(ref _selectedProviderName, value))
-            {
-                UpdateActiveProvider(SelectedService, value);
-            }
-        }
-    }
-
-    private ServiceProviderSettings GetCurrentSettings() => SelectedService switch
-    {
-        "LLM" => LlmSettings,
-        "VAD" => VadSettings,
-        "STT" => SttSettings,
-        "TTS" => TtsSettings,
-        _ => null!
-    };
-
-    public string EditingUrl
-    {
-        get => GetCurrentProvider()?.Url ?? string.Empty;
-        set
-        {
-            UpdateActiveProviderDetails(url: value);
-        }
-    }
-
-    private string _editingModelId = string.Empty;
-    public string EditingModelId
-    {
-        get => GetCurrentProvider()?.ModelId ?? string.Empty;
-        set
-        {
-            UpdateActiveProviderDetails(modelId: value);
-        }
-    }
-
-    private ProviderConfig? GetCurrentProvider() => SelectedService switch
-    {
-        "LLM" => SelectedLlmProvider,
-        "VAD" => SelectedVadProvider,
-        "STT" => SelectedSttProvider,
-        "TTS" => SelectedTtsProvider,
-        _ => null
-    };
-
-    private void UpdateActiveProviderDetails(string? url = null, string? modelId = null)
-    {
-        var current = GetCurrentProvider();
-        if (current == null) return;
-
-        var updated = current with
-        {
-            Url = url ?? current.Url,
-            ModelId = modelId ?? current.ModelId
-        };
-
-        switch (SelectedService)
-        {
-            case "LLM": LlmSettings = UpdateProviderList(LlmSettings, updated); break;
-            case "VAD": VadSettings = UpdateProviderList(VadSettings, updated); break;
-            case "STT": SttSettings = UpdateProviderList(SttSettings, updated); break;
-            case "TTS": TtsSettings = UpdateProviderList(TtsSettings, updated); break;
-        }
-    }
-
-    private ServiceProviderSettings UpdateProviderList(ServiceProviderSettings settings, ProviderConfig updated)
-    {
-        var list = settings.Providers.ToList();
-        var idx = list.FindIndex(p => p.Name == updated.Name);
-        if (idx >= 0) list[idx] = updated; else list.Add(updated);
-        return settings with { Providers = list };
-    }
-
-    private void UpdateCurrentProviderUrl(string url) { } // Obsolete, replaced by EditingUrl setter
-    private void UpdateCurrentProviderModelId(string modelId) { } // Obsolete
-
-    private double _preRollSeconds;
-    public double PreRollSeconds
-    {
-        get => _preRollSeconds;
-        set => SetProperty(ref _preRollSeconds, value);
-    }
-
-    private string _customSystemMessage = string.Empty;
-    public string CustomSystemMessage
-    {
-        get => _customSystemMessage;
-        set => SetProperty(ref _customSystemMessage, value);
-    }
-
-    private string _wakeWordText = string.Empty;
-    public string WakeWordText
-    {
-        get => _wakeWordText;
-        set => SetProperty(ref _wakeWordText, value);
-    }
-
-    private string _selectedAudioRouting = nameof(AudioRoutingPreference.Default);
-    public string SelectedAudioRouting
-    {
-        get => _selectedAudioRouting;
-        set => SetProperty(ref _selectedAudioRouting, value);
-    }
-
-    private string _loggingIntervalMinutes = "15";
-    public string LoggingIntervalMinutes
-    {
-        get => _loggingIntervalMinutes;
-        set => SetProperty(ref _loggingIntervalMinutes, value);
-    }
-
-    private string _summarizationTriggers = string.Empty;
-    public string SummarizationTriggers
-    {
-        get => _summarizationTriggers;
-        set => SetProperty(ref _summarizationTriggers, value);
-    }
-
-    private bool _enableActivityLogging = true;
-    public bool EnableActivityLogging
-    {
-        get => _enableActivityLogging;
-        set => SetProperty(ref _enableActivityLogging, value);
-    }
-
-    private bool _enableActivityAnalysis;
-    public bool EnableActivityAnalysis
-    {
-        get => _enableActivityAnalysis;
-        set => SetProperty(ref _enableActivityAnalysis, value);
-    }
-
-    private bool _useOnDeviceStt;
-    public bool UseOnDeviceStt
-    {
-        get => _useOnDeviceStt;
-        set
-        {
-            if (_useOnDeviceStt == value) return;
-
-            SetProperty(ref _useOnDeviceStt, value);
-            SelectedVoiceInputMode = value ? BuiltInAndroidVoiceMode : AiModelVoiceMode;
-            VoiceInputModeDescription = GetVoiceInputModeDescription(value);
-        }
-    }
-
-    private string _selectedVoiceInputMode = BuiltInAndroidVoiceMode;
-    public string SelectedVoiceInputMode
-    {
-        get => _selectedVoiceInputMode;
-        set
-        {
-            if (string.Equals(_selectedVoiceInputMode, value, StringComparison.Ordinal)) return;
-
-            SetProperty(ref _selectedVoiceInputMode, value);
-            var useBuiltIn = string.Equals(value, BuiltInAndroidVoiceMode, StringComparison.Ordinal);
-            if (_useOnDeviceStt != useBuiltIn)
-                SetProperty(ref _useOnDeviceStt, useBuiltIn, nameof(UseOnDeviceStt));
-            VoiceInputModeDescription = GetVoiceInputModeDescription(useBuiltIn);
-        }
-    }
-
-    private string _voiceInputModeDescription = string.Empty;
-    public string VoiceInputModeDescription
-    {
-        get => _voiceInputModeDescription;
-        set => SetProperty(ref _voiceInputModeDescription, value);
-    }
-
-    private string _whisperModelPath = string.Empty;
-    public string WhisperModelPath
-    {
-        get => _whisperModelPath;
-        set => SetProperty(ref _whisperModelPath, value);
-    }
-
-    private string _obsidianVaultPath = string.Empty;
-    public string ObsidianVaultPath
-    {
-        get => _obsidianVaultPath;
-        set => SetProperty(ref _obsidianVaultPath, value);
-    }
-
-    private string _obsidianMcpPath = string.Empty;
-    public string ObsidianMcpPath
-    {
-        get => _obsidianMcpPath;
-        set => SetProperty(ref _obsidianMcpPath, value);
-    }
-
-    private double _whisperDownloadProgress;
-    public double WhisperDownloadProgress
-    {
-        get => _whisperDownloadProgress;
-        set => SetProperty(ref _whisperDownloadProgress, value);
-    }
-
-    private bool _isWhisperDownloading;
-    public bool IsWhisperDownloading
-    {
-        get => _isWhisperDownloading;
-        set => SetProperty(ref _isWhisperDownloading, value);
-    }
-
-    private bool _isDiscoveringModels;
-    public bool IsDiscoveringModels
-    {
-        get => _isDiscoveringModels;
-        set => SetProperty(ref _isDiscoveringModels, value);
-    }
+    // ── Status ──────────────────────────────────────────────────────────────
 
     private string _statusMessage = string.Empty;
-    public string StatusMessage
+    public string StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
+
+    // ── Voice Assistant / Global Settings ───────────────────────────────────
+
+    private string _triggerPhrase = "hey quantum";
+    public string TriggerPhrase { get => _triggerPhrase; set => SetProperty(ref _triggerPhrase, value); }
+
+    private string _systemPrompt = string.Empty;
+    public string SystemPrompt { get => _systemPrompt; set => SetProperty(ref _systemPrompt, value); }
+
+    private double _preRollSeconds = 5.0;
+    public double PreRollSeconds { get => _preRollSeconds; set => SetProperty(ref _preRollSeconds, value); }
+
+    private double _postSilenceSeconds = 1.2;
+    public double PostSilenceSeconds { get => _postSilenceSeconds; set => SetProperty(ref _postSilenceSeconds, value); }
+
+    private double _wakeWordThreshold = 0.85;
+    public double WakeWordThreshold { get => _wakeWordThreshold; set => SetProperty(ref _wakeWordThreshold, value); }
+
+    private int _selectedAudioOutput;
+    public int SelectedAudioOutput { get => _selectedAudioOutput; set => SetProperty(ref _selectedAudioOutput, value); }
+
+    private double _maxToolCallIterations = 6;
+    public double MaxToolCallIterations { get => _maxToolCallIterations; set => SetProperty(ref _maxToolCallIterations, value); }
+
+    // ── Wake Word Stage ──────────────────────────────────────────────────────
+
+    private bool _wakeWordEnabled = true;
+    public bool WakeWordEnabled
     {
-        get => _statusMessage;
-        set => SetProperty(ref _statusMessage, value);
+        get => _wakeWordEnabled;
+        set { if (SetProperty(ref _wakeWordEnabled, value)) NotifyWakeWordShow(); }
     }
 
-    private bool _isBusy;
-    public bool IsBusy
+    private int _wakeWordMode;
+    public int WakeWordMode
     {
-        get => _isBusy;
-        set => SetProperty(ref _isBusy, value);
+        get => _wakeWordMode;
+        set { if (SetProperty(ref _wakeWordMode, value)) { NotifyWakeWordShow(); NotifyWakeWordColors(); } }
     }
 
-    private string _mcpNameInput = string.Empty;
-    public string McpNameInput
+    private string _wakeWordRemoteUrl = string.Empty;
+    public string WakeWordRemoteUrl { get => _wakeWordRemoteUrl; set => SetProperty(ref _wakeWordRemoteUrl, value); }
+    private string _wakeWordRemoteApiKey = string.Empty;
+    public string WakeWordRemoteApiKey { get => _wakeWordRemoteApiKey; set => SetProperty(ref _wakeWordRemoteApiKey, value); }
+    private string _wakeWordRemoteModelId = string.Empty;
+    public string WakeWordRemoteModelId { get => _wakeWordRemoteModelId; set => SetProperty(ref _wakeWordRemoteModelId, value); }
+    private int _wakeWordRemoteTimeout = 30;
+    public int WakeWordRemoteTimeout { get => _wakeWordRemoteTimeout; set => SetProperty(ref _wakeWordRemoteTimeout, value); }
+    private string _wakeWordLocalModelPath = string.Empty;
+    public string WakeWordLocalModelPath { get => _wakeWordLocalModelPath; set => SetProperty(ref _wakeWordLocalModelPath, value); }
+    private int _wakeWordLocalServerPort = 8025;
+    public int WakeWordLocalServerPort { get => _wakeWordLocalServerPort; set => SetProperty(ref _wakeWordLocalServerPort, value); }
+    private string _wakeWordLocalParameters = string.Empty;
+    public string WakeWordLocalParameters { get => _wakeWordLocalParameters; set => SetProperty(ref _wakeWordLocalParameters, value); }
+
+    public bool WakeWordShowRemote => WakeWordEnabled && WakeWordMode == 0;
+    public bool WakeWordShowLocal => WakeWordEnabled && WakeWordMode == 1;
+    public bool WakeWordShowBuiltIn => WakeWordEnabled && WakeWordMode == 2;
+    public Color WakeWordRemoteButtonColor => WakeWordMode == 0 ? AccentColor : InactiveColor;
+    public Color WakeWordLocalButtonColor => WakeWordMode == 1 ? AccentColor : InactiveColor;
+    public Color WakeWordBuiltInButtonColor => WakeWordMode == 2 ? AccentColor : InactiveColor;
+    public Color WakeWordRemoteButtonTextColor => WakeWordMode == 0 ? ActiveTextColor : InactiveTextColor;
+    public Color WakeWordLocalButtonTextColor => WakeWordMode == 1 ? ActiveTextColor : InactiveTextColor;
+    public Color WakeWordBuiltInButtonTextColor => WakeWordMode == 2 ? ActiveTextColor : InactiveTextColor;
+
+    private void NotifyWakeWordShow()
     {
-        get => _mcpNameInput;
-        set => SetProperty(ref _mcpNameInput, value);
+        OnPropertyChanged(nameof(WakeWordShowRemote));
+        OnPropertyChanged(nameof(WakeWordShowLocal));
+        OnPropertyChanged(nameof(WakeWordShowBuiltIn));
     }
 
-    private string _mcpEndpointInput = string.Empty;
-    public string McpEndpointInput
+    private void NotifyWakeWordColors()
     {
-        get => _mcpEndpointInput;
-        set => SetProperty(ref _mcpEndpointInput, value);
+        OnPropertyChanged(nameof(WakeWordRemoteButtonColor)); OnPropertyChanged(nameof(WakeWordLocalButtonColor)); OnPropertyChanged(nameof(WakeWordBuiltInButtonColor));
+        OnPropertyChanged(nameof(WakeWordRemoteButtonTextColor)); OnPropertyChanged(nameof(WakeWordLocalButtonTextColor)); OnPropertyChanged(nameof(WakeWordBuiltInButtonTextColor));
     }
 
-    private string _mcpApiKeyInput = string.Empty;
-    public string McpApiKeyInput
+    // ── VAD Stage ────────────────────────────────────────────────────────────
+
+    private bool _vadEnabled = true;
+    public bool VadEnabled
     {
-        get => _mcpApiKeyInput;
-        set => SetProperty(ref _mcpApiKeyInput, value);
+        get => _vadEnabled;
+        set { if (SetProperty(ref _vadEnabled, value)) NotifyVadShow(); }
     }
 
-    public ObservableCollection<string> AudioRoutingOptions { get; } =
-    [
-        nameof(AudioRoutingPreference.Default),
-        nameof(AudioRoutingPreference.AlwaysSpeaker),
-        nameof(AudioRoutingPreference.AlwaysHeadset),
-        nameof(AudioRoutingPreference.Dynamic)
-    ];
+    private int _vadMode;
+    public int VadMode
+    {
+        get => _vadMode;
+        set { if (SetProperty(ref _vadMode, value)) { NotifyVadShow(); NotifyVadColors(); } }
+    }
 
-    private const string BuiltInAndroidVoiceMode = "Built-in Android dictation";
-    private const string AiModelVoiceMode = "AI model pipeline (VAD + STT)";
+    private string _vadRemoteUrl = string.Empty;
+    public string VadRemoteUrl { get => _vadRemoteUrl; set => SetProperty(ref _vadRemoteUrl, value); }
+    private string _vadRemoteApiKey = string.Empty;
+    public string VadRemoteApiKey { get => _vadRemoteApiKey; set => SetProperty(ref _vadRemoteApiKey, value); }
+    private string _vadRemoteModelId = string.Empty;
+    public string VadRemoteModelId { get => _vadRemoteModelId; set => SetProperty(ref _vadRemoteModelId, value); }
+    private int _vadRemoteTimeout = 30;
+    public int VadRemoteTimeout { get => _vadRemoteTimeout; set => SetProperty(ref _vadRemoteTimeout, value); }
+    private string _vadLocalModelPath = string.Empty;
+    public string VadLocalModelPath { get => _vadLocalModelPath; set => SetProperty(ref _vadLocalModelPath, value); }
+    private int _vadLocalServerPort = 8025;
+    public int VadLocalServerPort { get => _vadLocalServerPort; set => SetProperty(ref _vadLocalServerPort, value); }
+    private string _vadLocalParameters = string.Empty;
+    public string VadLocalParameters { get => _vadLocalParameters; set => SetProperty(ref _vadLocalParameters, value); }
 
-    public ObservableCollection<string> VoiceInputModeOptions { get; } =
-    [
-        BuiltInAndroidVoiceMode,
-        AiModelVoiceMode
-    ];
+    public bool VadShowRemote => VadEnabled && VadMode == 0;
+    public bool VadShowLocal => VadEnabled && VadMode == 1;
+    public bool VadShowBuiltIn => VadEnabled && VadMode == 2;
+    public Color VadRemoteButtonColor => VadMode == 0 ? AccentColor : InactiveColor;
+    public Color VadLocalButtonColor => VadMode == 1 ? AccentColor : InactiveColor;
+    public Color VadBuiltInButtonColor => VadMode == 2 ? AccentColor : InactiveColor;
+    public Color VadRemoteButtonTextColor => VadMode == 0 ? ActiveTextColor : InactiveTextColor;
+    public Color VadLocalButtonTextColor => VadMode == 1 ? ActiveTextColor : InactiveTextColor;
+    public Color VadBuiltInButtonTextColor => VadMode == 2 ? ActiveTextColor : InactiveTextColor;
 
-    public ObservableCollection<string> AvailableModels { get; } = [];
+    private void NotifyVadShow()
+    {
+        OnPropertyChanged(nameof(VadShowRemote));
+        OnPropertyChanged(nameof(VadShowLocal));
+        OnPropertyChanged(nameof(VadShowBuiltIn));
+    }
+
+    private void NotifyVadColors()
+    {
+        OnPropertyChanged(nameof(VadRemoteButtonColor)); OnPropertyChanged(nameof(VadLocalButtonColor)); OnPropertyChanged(nameof(VadBuiltInButtonColor));
+        OnPropertyChanged(nameof(VadRemoteButtonTextColor)); OnPropertyChanged(nameof(VadLocalButtonTextColor)); OnPropertyChanged(nameof(VadBuiltInButtonTextColor));
+    }
+
+    // ── STT Stage ────────────────────────────────────────────────────────────
+
+    private bool _sttEnabled = true;
+    public bool SttEnabled
+    {
+        get => _sttEnabled;
+        set { if (SetProperty(ref _sttEnabled, value)) NotifySttShow(); }
+    }
+
+    private int _sttMode;
+    public int SttMode
+    {
+        get => _sttMode;
+        set { if (SetProperty(ref _sttMode, value)) { NotifySttShow(); NotifySttColors(); } }
+    }
+
+    private string _sttRemoteUrl = string.Empty;
+    public string SttRemoteUrl { get => _sttRemoteUrl; set => SetProperty(ref _sttRemoteUrl, value); }
+    private string _sttRemoteApiKey = string.Empty;
+    public string SttRemoteApiKey { get => _sttRemoteApiKey; set => SetProperty(ref _sttRemoteApiKey, value); }
+    private string _sttRemoteModelId = string.Empty;
+    public string SttRemoteModelId { get => _sttRemoteModelId; set => SetProperty(ref _sttRemoteModelId, value); }
+    private int _sttRemoteTimeout = 30;
+    public int SttRemoteTimeout { get => _sttRemoteTimeout; set => SetProperty(ref _sttRemoteTimeout, value); }
+    private string _sttLocalModelPath = string.Empty;
+    public string SttLocalModelPath { get => _sttLocalModelPath; set => SetProperty(ref _sttLocalModelPath, value); }
+    private int _sttLocalServerPort = 8025;
+    public int SttLocalServerPort { get => _sttLocalServerPort; set => SetProperty(ref _sttLocalServerPort, value); }
+    private string _sttLocalParameters = string.Empty;
+    public string SttLocalParameters { get => _sttLocalParameters; set => SetProperty(ref _sttLocalParameters, value); }
+
+    public bool SttShowRemote => SttEnabled && SttMode == 0;
+    public bool SttShowLocal => SttEnabled && SttMode == 1;
+    public bool SttShowBuiltIn => SttEnabled && SttMode == 2;
+    public Color SttRemoteButtonColor => SttMode == 0 ? AccentColor : InactiveColor;
+    public Color SttLocalButtonColor => SttMode == 1 ? AccentColor : InactiveColor;
+    public Color SttBuiltInButtonColor => SttMode == 2 ? AccentColor : InactiveColor;
+    public Color SttRemoteButtonTextColor => SttMode == 0 ? ActiveTextColor : InactiveTextColor;
+    public Color SttLocalButtonTextColor => SttMode == 1 ? ActiveTextColor : InactiveTextColor;
+    public Color SttBuiltInButtonTextColor => SttMode == 2 ? ActiveTextColor : InactiveTextColor;
+
+    private void NotifySttShow()
+    {
+        OnPropertyChanged(nameof(SttShowRemote));
+        OnPropertyChanged(nameof(SttShowLocal));
+        OnPropertyChanged(nameof(SttShowBuiltIn));
+    }
+
+    private void NotifySttColors()
+    {
+        OnPropertyChanged(nameof(SttRemoteButtonColor)); OnPropertyChanged(nameof(SttLocalButtonColor)); OnPropertyChanged(nameof(SttBuiltInButtonColor));
+        OnPropertyChanged(nameof(SttRemoteButtonTextColor)); OnPropertyChanged(nameof(SttLocalButtonTextColor)); OnPropertyChanged(nameof(SttBuiltInButtonTextColor));
+    }
+
+    // ── LLM Stage ────────────────────────────────────────────────────────────
+
+    private bool _llmEnabled = true;
+    public bool LlmEnabled
+    {
+        get => _llmEnabled;
+        set { if (SetProperty(ref _llmEnabled, value)) NotifyLlmShow(); }
+    }
+
+    private int _llmMode;
+    public int LlmMode
+    {
+        get => _llmMode;
+        set { if (SetProperty(ref _llmMode, value)) { NotifyLlmShow(); NotifyLlmColors(); } }
+    }
+
+    private string _llmRemoteUrl = string.Empty;
+    public string LlmRemoteUrl { get => _llmRemoteUrl; set => SetProperty(ref _llmRemoteUrl, value); }
+    private string _llmRemoteApiKey = string.Empty;
+    public string LlmRemoteApiKey { get => _llmRemoteApiKey; set => SetProperty(ref _llmRemoteApiKey, value); }
+    private string _llmRemoteModelId = string.Empty;
+    public string LlmRemoteModelId { get => _llmRemoteModelId; set => SetProperty(ref _llmRemoteModelId, value); }
+    private int _llmRemoteTimeout = 30;
+    public int LlmRemoteTimeout { get => _llmRemoteTimeout; set => SetProperty(ref _llmRemoteTimeout, value); }
+    private string _llmLocalModelPath = string.Empty;
+    public string LlmLocalModelPath { get => _llmLocalModelPath; set => SetProperty(ref _llmLocalModelPath, value); }
+    private int _llmLocalServerPort = 8025;
+    public int LlmLocalServerPort { get => _llmLocalServerPort; set => SetProperty(ref _llmLocalServerPort, value); }
+    private string _llmLocalParameters = string.Empty;
+    public string LlmLocalParameters { get => _llmLocalParameters; set => SetProperty(ref _llmLocalParameters, value); }
+
+    public bool LlmShowRemote => LlmEnabled && LlmMode == 0;
+    public bool LlmShowLocal => LlmEnabled && LlmMode == 1;
+    public Color LlmRemoteButtonColor => LlmMode == 0 ? AccentColor : InactiveColor;
+    public Color LlmLocalButtonColor => LlmMode == 1 ? AccentColor : InactiveColor;
+    public Color LlmRemoteButtonTextColor => LlmMode == 0 ? ActiveTextColor : InactiveTextColor;
+    public Color LlmLocalButtonTextColor => LlmMode == 1 ? ActiveTextColor : InactiveTextColor;
+
+    private void NotifyLlmShow()
+    {
+        OnPropertyChanged(nameof(LlmShowRemote));
+        OnPropertyChanged(nameof(LlmShowLocal));
+    }
+
+    private void NotifyLlmColors()
+    {
+        OnPropertyChanged(nameof(LlmRemoteButtonColor)); OnPropertyChanged(nameof(LlmLocalButtonColor));
+        OnPropertyChanged(nameof(LlmRemoteButtonTextColor)); OnPropertyChanged(nameof(LlmLocalButtonTextColor));
+    }
+
+    // ── TTS Stage ────────────────────────────────────────────────────────────
+
+    private bool _ttsEnabled = true;
+    public bool TtsEnabled
+    {
+        get => _ttsEnabled;
+        set { if (SetProperty(ref _ttsEnabled, value)) NotifyTtsShow(); }
+    }
+
+    private int _ttsMode;
+    public int TtsMode
+    {
+        get => _ttsMode;
+        set { if (SetProperty(ref _ttsMode, value)) { NotifyTtsShow(); NotifyTtsColors(); } }
+    }
+
+    private string _ttsRemoteUrl = string.Empty;
+    public string TtsRemoteUrl { get => _ttsRemoteUrl; set => SetProperty(ref _ttsRemoteUrl, value); }
+    private string _ttsRemoteApiKey = string.Empty;
+    public string TtsRemoteApiKey { get => _ttsRemoteApiKey; set => SetProperty(ref _ttsRemoteApiKey, value); }
+    private string _ttsRemoteModelId = string.Empty;
+    public string TtsRemoteModelId { get => _ttsRemoteModelId; set => SetProperty(ref _ttsRemoteModelId, value); }
+    private int _ttsRemoteTimeout = 30;
+    public int TtsRemoteTimeout { get => _ttsRemoteTimeout; set => SetProperty(ref _ttsRemoteTimeout, value); }
+    private string _ttsLocalModelPath = string.Empty;
+    public string TtsLocalModelPath { get => _ttsLocalModelPath; set => SetProperty(ref _ttsLocalModelPath, value); }
+    private int _ttsLocalServerPort = 8025;
+    public int TtsLocalServerPort { get => _ttsLocalServerPort; set => SetProperty(ref _ttsLocalServerPort, value); }
+    private string _ttsLocalParameters = string.Empty;
+    public string TtsLocalParameters { get => _ttsLocalParameters; set => SetProperty(ref _ttsLocalParameters, value); }
+
+    public bool TtsShowRemote => TtsEnabled && TtsMode == 0;
+    public bool TtsShowLocal => TtsEnabled && TtsMode == 1;
+    public bool TtsShowBuiltIn => TtsEnabled && TtsMode == 2;
+    public Color TtsRemoteButtonColor => TtsMode == 0 ? AccentColor : InactiveColor;
+    public Color TtsLocalButtonColor => TtsMode == 1 ? AccentColor : InactiveColor;
+    public Color TtsBuiltInButtonColor => TtsMode == 2 ? AccentColor : InactiveColor;
+    public Color TtsRemoteButtonTextColor => TtsMode == 0 ? ActiveTextColor : InactiveTextColor;
+    public Color TtsLocalButtonTextColor => TtsMode == 1 ? ActiveTextColor : InactiveTextColor;
+    public Color TtsBuiltInButtonTextColor => TtsMode == 2 ? ActiveTextColor : InactiveTextColor;
+
+    private void NotifyTtsShow()
+    {
+        OnPropertyChanged(nameof(TtsShowRemote));
+        OnPropertyChanged(nameof(TtsShowLocal));
+        OnPropertyChanged(nameof(TtsShowBuiltIn));
+    }
+
+    private void NotifyTtsColors()
+    {
+        OnPropertyChanged(nameof(TtsRemoteButtonColor)); OnPropertyChanged(nameof(TtsLocalButtonColor)); OnPropertyChanged(nameof(TtsBuiltInButtonColor));
+        OnPropertyChanged(nameof(TtsRemoteButtonTextColor)); OnPropertyChanged(nameof(TtsLocalButtonTextColor)); OnPropertyChanged(nameof(TtsBuiltInButtonTextColor));
+    }
+
+    // ── MCP Servers ──────────────────────────────────────────────────────────
 
     public ObservableCollection<McpServerConfig> McpServers { get; } = [];
 
+    private string _mcpNameInput = string.Empty;
+    public string McpNameInput { get => _mcpNameInput; set => SetProperty(ref _mcpNameInput, value); }
+
+    private string _mcpEndpointInput = string.Empty;
+    public string McpEndpointInput { get => _mcpEndpointInput; set => SetProperty(ref _mcpEndpointInput, value); }
+
+    private string _mcpApiKeyInput = string.Empty;
+    public string McpApiKeyInput { get => _mcpApiKeyInput; set => SetProperty(ref _mcpApiKeyInput, value); }
+
+    // ── Commands ─────────────────────────────────────────────────────────────
+
     private ICommand? _saveSettingsCommand;
     public ICommand SaveSettingsCommand => _saveSettingsCommand ??= new AsyncRelayCommand(SaveSettingsAsync);
+
+    private ICommand? _setStageModeCommand;
+    public ICommand SetStageModeCommand => _setStageModeCommand ??= new RelayCommand<string>(SetStageMode);
 
     private ICommand? _addMcpServerCommand;
     public ICommand AddMcpServerCommand => _addMcpServerCommand ??= new RelayCommand(AddMcpServer);
@@ -391,166 +341,161 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
     private ICommand? _removeMcpServerCommand;
     public ICommand RemoveMcpServerCommand => _removeMcpServerCommand ??= new RelayCommand<McpServerConfig>(RemoveMcpServer);
 
-    private ICommand? _downloadWhisperCommand;
-    public ICommand DownloadWhisperCommand => _downloadWhisperCommand ??= new AsyncRelayCommand(DownloadWhisperAsync);
+    // ── Load / Save ──────────────────────────────────────────────────────────
 
-    private ICommand? _addObsidianMcpCommand;
-    public ICommand AddObsidianMcpCommand => _addObsidianMcpCommand ??= new RelayCommand(AddObsidianMcpServer);
-
-    private ICommand? _refreshModelsCommand;
-    public ICommand RefreshModelsCommand => _refreshModelsCommand ??= new AsyncRelayCommand(RefreshModelsAsync);
-
-    private void ScheduleModelRefresh()
-    {
-        _modelRefreshDebounce?.Cancel();
-        _modelRefreshDebounce?.Dispose();
-        _modelRefreshDebounce = new CancellationTokenSource();
-
-        var token = _modelRefreshDebounce.Token;
-        _ = RefreshModelsAfterDelayAsync(token);
-    }
-
-    private async Task RefreshModelsAfterDelayAsync(CancellationToken cancellationToken)
+    /// <summary>Populates all flat bindable properties from the settings service. Must be called after construction.</summary>
+    public void LoadSettings()
     {
         try
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(900), cancellationToken);
+            var pipeline = _settingsService.PipelineSettings;
+            var voice = _settingsService.VoiceAssistantSettings;
 
-            if (cancellationToken.IsCancellationRequested || !IsValidAbsoluteUrl(GetCurrentSvcUrl())) return;
+            TriggerPhrase = voice.TriggerPhrase;
+            SystemPrompt = voice.SystemPrompt;
+            PreRollSeconds = voice.PreRollSeconds;
+            PostSilenceSeconds = voice.PostSilenceSeconds;
+            WakeWordThreshold = voice.WakeWordThreshold;
+            SelectedAudioOutput = (int)voice.AudioOutput;
+            MaxToolCallIterations = voice.MaxToolCallIterations;
 
-            await RefreshModelsAsync();
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when the user keeps typing.
-        }
-    }
+            WakeWordEnabled = pipeline.WakeWord.Enabled;
+            WakeWordMode = (int)pipeline.WakeWord.Mode;
+            WakeWordRemoteUrl = pipeline.WakeWord.Remote?.Url ?? string.Empty;
+            WakeWordRemoteApiKey = pipeline.WakeWord.Remote?.ApiKey ?? string.Empty;
+            WakeWordRemoteModelId = pipeline.WakeWord.Remote?.ModelId ?? string.Empty;
+            WakeWordRemoteTimeout = pipeline.WakeWord.Remote?.TimeoutSeconds ?? 30;
+            WakeWordLocalModelPath = pipeline.WakeWord.Local?.ModelPath ?? string.Empty;
+            WakeWordLocalServerPort = pipeline.WakeWord.Local?.ServerPort ?? 8025;
+            WakeWordLocalParameters = pipeline.WakeWord.Local?.AdditionalParameters ?? string.Empty;
 
-    private async Task RefreshModelsAsync()
-    {
-        if (IsDiscoveringModels) return;
+            VadEnabled = pipeline.Vad.Enabled;
+            VadMode = (int)pipeline.Vad.Mode;
+            VadRemoteUrl = pipeline.Vad.Remote?.Url ?? string.Empty;
+            VadRemoteApiKey = pipeline.Vad.Remote?.ApiKey ?? string.Empty;
+            VadRemoteModelId = pipeline.Vad.Remote?.ModelId ?? string.Empty;
+            VadRemoteTimeout = pipeline.Vad.Remote?.TimeoutSeconds ?? 30;
+            VadLocalModelPath = pipeline.Vad.Local?.ModelPath ?? string.Empty;
+            VadLocalServerPort = pipeline.Vad.Local?.ServerPort ?? 8025;
+            VadLocalParameters = pipeline.Vad.Local?.AdditionalParameters ?? string.Empty;
 
-        var llmUrl = GetCurrentSvcUrl().Trim();
-        if (string.IsNullOrWhiteSpace(llmUrl))
-        {
-            StatusMessage = "Enter an LLM endpoint URL before refreshing models.";
-            return;
-        }
+            SttEnabled = pipeline.Stt.Enabled;
+            SttMode = (int)pipeline.Stt.Mode;
+            SttRemoteUrl = pipeline.Stt.Remote?.Url ?? string.Empty;
+            SttRemoteApiKey = pipeline.Stt.Remote?.ApiKey ?? string.Empty;
+            SttRemoteModelId = pipeline.Stt.Remote?.ModelId ?? string.Empty;
+            SttRemoteTimeout = pipeline.Stt.Remote?.TimeoutSeconds ?? 30;
+            SttLocalModelPath = pipeline.Stt.Local?.ModelPath ?? string.Empty;
+            SttLocalServerPort = pipeline.Stt.Local?.ServerPort ?? 8025;
+            SttLocalParameters = pipeline.Stt.Local?.AdditionalParameters ?? string.Empty;
 
-        if (!IsValidAbsoluteUrl(llmUrl))
-        {
-            StatusMessage = "Enter a valid absolute LLM endpoint URL before refreshing models.";
-            return;
-        }
+            LlmEnabled = pipeline.Llm.Enabled;
+            LlmMode = (int)pipeline.Llm.Mode;
+            LlmRemoteUrl = pipeline.Llm.Remote?.Url ?? string.Empty;
+            LlmRemoteApiKey = pipeline.Llm.Remote?.ApiKey ?? string.Empty;
+            LlmRemoteModelId = pipeline.Llm.Remote?.ModelId ?? string.Empty;
+            LlmRemoteTimeout = pipeline.Llm.Remote?.TimeoutSeconds ?? 30;
+            LlmLocalModelPath = pipeline.Llm.Local?.ModelPath ?? string.Empty;
+            LlmLocalServerPort = pipeline.Llm.Local?.ServerPort ?? 8025;
+            LlmLocalParameters = pipeline.Llm.Local?.AdditionalParameters ?? string.Empty;
 
-        _modelRefreshDebounce?.Cancel();
-        IsDiscoveringModels = true;
-        StatusMessage = "Discovering LLM models...";
+            TtsEnabled = pipeline.Tts.Enabled;
+            TtsMode = (int)pipeline.Tts.Mode;
+            TtsRemoteUrl = pipeline.Tts.Remote?.Url ?? string.Empty;
+            TtsRemoteApiKey = pipeline.Tts.Remote?.ApiKey ?? string.Empty;
+            TtsRemoteModelId = pipeline.Tts.Remote?.ModelId ?? string.Empty;
+            TtsRemoteTimeout = pipeline.Tts.Remote?.TimeoutSeconds ?? 30;
+            TtsLocalModelPath = pipeline.Tts.Local?.ModelPath ?? string.Empty;
+            TtsLocalServerPort = pipeline.Tts.Local?.ServerPort ?? 8025;
+            TtsLocalParameters = pipeline.Tts.Local?.AdditionalParameters ?? string.Empty;
 
-        try
-        {
-            var models = await _aiClient.GetAvailableModelsAsync();
+            McpServers.Clear();
+            foreach (var srv in _settingsService.McpServers)
+                McpServers.Add(srv);
 
-            AvailableModels.Clear();
-            foreach (var model in models.Where(m => !string.IsNullOrWhiteSpace(m)).Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                AvailableModels.Add(model);
-            }
-
-            var preferredModel = FirstNonEmpty(SelectedProviderName, _settings.LlmSettings.ActiveProviderName);
-            if (!string.IsNullOrWhiteSpace(preferredModel) && !AvailableModels.Contains(preferredModel, StringComparer.OrdinalIgnoreCase))
-            {
-                AvailableModels.Insert(0, preferredModel);
-            }
-
-            if (AvailableModels.Count == 0)
-            {
-                StatusMessage = "No models were returned by the configured LLM endpoint.";
-                return;
-            }
-
-            // Model selection is now handled via ProviderConfig in the structured settings
-
-            StatusMessage = $"Discovered {AvailableModels.Count} LLM model(s).";
+            _logger.Log("SettingsViewModel", "Settings loaded.", LogLevel.Info);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Model discovery failed: {ex.Message}";
-        }
-        finally
-        {
-            IsDiscoveringModels = false;
+            _logger.Log("SettingsViewModel", $"Load failed: {ex.Message}", LogLevel.Error);
+            StatusMessage = "Failed to load settings.";
         }
     }
 
     private async Task SaveSettingsAsync()
     {
-        if (IsBusy) return;
-        IsBusy = true;
-        StatusMessage = string.Empty;
-
         try
         {
-            _settings.ShowAdvancedNetworkSettings = ShowAdvancedNetworkSettings;
-            _settings.LlmSettings = LlmSettings;
-            _settings.VadSettings = VadSettings;
-            _settings.SttSettings = SttSettings;
-            _settings.TtsSettings = TtsSettings;
-
-            _settings.GlobalSettings = _settings.GlobalSettings with
+            _settingsService.VoiceAssistantSettings = new VoiceAssistantSettings
             {
-                UseLocalLlm = UseLocalLlm,
-                UseLocalTts = UseLocalTts,
-                // PreRoll and CustomSystemMessage are handled below
+                TriggerPhrase = TriggerPhrase,
+                SystemPrompt = SystemPrompt,
+                PreRollSeconds = (float)PreRollSeconds,
+                PostSilenceSeconds = (float)PostSilenceSeconds,
+                WakeWordThreshold = (float)WakeWordThreshold,
+                AudioOutput = (AudioOutputMode)SelectedAudioOutput,
+                MaxToolCallIterations = (int)MaxToolCallIterations,
             };
 
-            _settings.GlobalSettings = _settings.GlobalSettings with
+            _settingsService.PipelineSettings = new PipelineSettings
             {
-                PreRollSeconds = PreRollSeconds,
-                CustomSystemMessage = CustomSystemMessage
+                WakeWord = BuildStage(WakeWordEnabled, WakeWordMode, WakeWordRemoteUrl, WakeWordRemoteApiKey, WakeWordRemoteModelId, WakeWordRemoteTimeout, WakeWordLocalModelPath, WakeWordLocalServerPort, WakeWordLocalParameters),
+                Vad = BuildStage(VadEnabled, VadMode, VadRemoteUrl, VadRemoteApiKey, VadRemoteModelId, VadRemoteTimeout, VadLocalModelPath, VadLocalServerPort, VadLocalParameters),
+                Stt = BuildStage(SttEnabled, SttMode, SttRemoteUrl, SttRemoteApiKey, SttRemoteModelId, SttRemoteTimeout, SttLocalModelPath, SttLocalServerPort, SttLocalParameters),
+                Llm = BuildStage(LlmEnabled, LlmMode, LlmRemoteUrl, LlmRemoteApiKey, LlmRemoteModelId, LlmRemoteTimeout, LlmLocalModelPath, LlmLocalServerPort, LlmLocalParameters),
+                Tts = BuildStage(TtsEnabled, TtsMode, TtsRemoteUrl, TtsRemoteApiKey, TtsRemoteModelId, TtsRemoteTimeout, TtsLocalModelPath, TtsLocalServerPort, TtsLocalParameters),
             };
 
-            // Other settings remain the same as they weren't part of provider refactor yet in this turn
-            if (Enum.TryParse<AudioRoutingPreference>(SelectedAudioRouting, out var routing))
-                _settings.AudioRouting = routing;
+            _settingsService.McpServers = [.. McpServers];
 
-            if (int.TryParse(LoggingIntervalMinutes, out var minutes) && minutes > 0)
-                _settings.LoggingInterval = TimeSpan.FromMinutes(minutes);
-
-            _settings.SummarizationTriggers = SplitList(SummarizationTriggers);
-            _settings.EnableActivityLogging = EnableActivityLogging;
-            _settings.EnableActivityAnalysis = EnableActivityAnalysis;
-            UseOnDeviceStt = string.Equals(SelectedVoiceInputMode, BuiltInAndroidVoiceMode, StringComparison.Ordinal);
-            _settings.UseOnDeviceStt = UseOnDeviceStt;
-            _settings.WhisperModelPath = (WhisperModelPath ?? "").Trim();
-            _settings.ObsidianVaultPath = (ObsidianVaultPath ?? "").Trim();
-            _settings.McpServers = [.. McpServers];
-
-            // Obsidian MCP path update logic...
-            var obsidianMcp = _settings.McpServers.FirstOrDefault(s => s.Name == "obsidian");
-            if (obsidianMcp != null)
-            {
-                var updatedArgs = new List<string>(obsidianMcp.Args);
-                if (updatedArgs.Count > 0) updatedArgs[^1] = (ObsidianMcpPath ?? "").Trim(); else updatedArgs.Add((ObsidianMcpPath ?? "").Trim());
-                var list = _settings.McpServers.ToList();
-                var idx = list.FindIndex(s => s.Name == "obsidian");
-                if (idx >= 0) list[idx] = obsidianMcp with { Args = updatedArgs };
-                _settings.McpServers = list;
-            }
-
-            StatusMessage = "Configuration saved successfully.";
-            await _dialogService.ShowAlertAsync("Saved", "Configuration saved successfully.");
+            StatusMessage = "Settings saved.";
+            _logger.Log("SettingsViewModel", "Settings saved.", LogLevel.Info);
             await Task.Delay(2000);
             StatusMessage = string.Empty;
         }
         catch (Exception ex)
         {
+            _logger.Log("SettingsViewModel", $"Save failed: {ex.Message}", LogLevel.Error);
             StatusMessage = $"Save failed: {ex.Message}";
-            await _dialogService.ShowAlertAsync("Save Error", ex.Message);
         }
-        finally
+    }
+
+    /// <summary>Constructs a <see cref="StageSettings"/> record from flat ViewModel properties.</summary>
+    private static StageSettings BuildStage(
+        bool enabled, int mode,
+        string url, string apiKey, string modelId, int timeout,
+        string localPath, int localPort, string localParams) => new()
+    {
+        Enabled = enabled,
+        Mode = (ModelMode)mode,
+        Remote = mode == 0 ? new RemoteEndpointConfig
         {
-            IsBusy = false;
+            Url = url,
+            ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
+            ModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId,
+            TimeoutSeconds = timeout,
+        } : null,
+        Local = mode == 1 ? new LocalModelConfig
+        {
+            ModelPath = localPath,
+            ServerPort = localPort,
+            AdditionalParameters = string.IsNullOrWhiteSpace(localParams) ? null : localParams,
+        } : null,
+    };
+
+    /// <summary>Parses "StageName:modeIndex" from button CommandParameter and updates the appropriate mode property.</summary>
+    private void SetStageMode(string? param)
+    {
+        if (param is null) return;
+        var idx = param.IndexOf(':');
+        if (idx < 0 || !int.TryParse(param.AsSpan(idx + 1), out var mode)) return;
+        switch (param[..idx])
+        {
+            case "WakeWord": WakeWordMode = mode; break;
+            case "Vad": VadMode = mode; break;
+            case "Stt": SttMode = mode; break;
+            case "Llm": LlmMode = mode; break;
+            case "Tts": TtsMode = mode; break;
         }
     }
 
@@ -558,29 +503,17 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
     {
         if (string.IsNullOrWhiteSpace(McpNameInput) || string.IsNullOrWhiteSpace(McpEndpointInput))
         {
-            StatusMessage = "MCP server name and endpoint are required.";
+            StatusMessage = "Name and endpoint are required.";
             return;
         }
-
-        if (!Uri.TryCreate(McpEndpointInput, UriKind.Absolute, out _))
-        {
-            StatusMessage = "Invalid MCP endpoint URL.";
-            return;
-        }
-
-        var server = new McpServerConfig(
+        McpServers.Add(new McpServerConfig(
             McpNameInput.Trim(),
             McpEndpointInput.Trim(),
             string.IsNullOrWhiteSpace(McpApiKeyInput) ? null : McpApiKeyInput.Trim()
-        );
-
-        McpServers.Add(server);
+        ));
         McpNameInput = string.Empty;
         McpEndpointInput = string.Empty;
         McpApiKeyInput = string.Empty;
-        OnPropertyChanged(nameof(McpNameInput));
-        OnPropertyChanged(nameof(McpEndpointInput));
-        OnPropertyChanged(nameof(McpApiKeyInput));
         StatusMessage = "MCP server added. Remember to save.";
     }
 
@@ -588,162 +521,6 @@ public class SettingsViewModel(ISettingsService settings, IAIClient aiClient, ID
     {
         if (server is null) return;
         McpServers.Remove(server);
-        StatusMessage = "MCP server removed. Remember to save.";
+        StatusMessage = "MCP server removed.";
     }
-
-    private async Task DownloadWhisperAsync()
-    {
-        if (IsWhisperDownloading) return;
-        IsWhisperDownloading = true;
-        StatusMessage = "Downloading Whisper model...";
-        try
-        {
-            var progress = new Progress<double>(p =>
-            {
-                WhisperDownloadProgress = p;
-                StatusMessage = $"Downloading... {p:P0}";
-            });
-            var success = await _whisperDownloader.EnsureModelAsync(progress);
-            if (success)
-            {
-                WhisperModelPath = _whisperDownloader.GetEffectiveModelPath();
-                _settings.WhisperModelPath = WhisperModelPath;
-                StatusMessage = "Whisper model ready.";
-                await _dialogService.ShowAlertAsync("Download Complete", "Whisper model downloaded successfully.");
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Download failed: {ex.Message}";
-            await _dialogService.ShowAlertAsync("Download Failed", ex.Message);
-        }
-        finally
-        {
-            IsWhisperDownloading = false;
-            WhisperDownloadProgress = 0;
-        }
-    }
-
-    private void AddObsidianMcpServer()
-    {
-        var path = ObsidianMcpPath?.Trim();
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            StatusMessage = "Obsidian vault path is required for the MCP server.";
-            return;
-        }
-
-        var existing = McpServers.FirstOrDefault(s => s.Name == "obsidian");
-        if (existing != null)
-        {
-            McpServers.Remove(existing);
-        }
-
-        var server = new McpServerConfig(
-            Name: "obsidian",
-            Endpoint: "stdio",
-            Transport: McpTransportType.Stdio,
-            Command: "npx",
-            Args: ["-y", "@bitbonsai/mcpvault@latest", path],
-            Env: new Dictionary<string, string>
-            {
-                ["MCP_MODE"] = "stdio",
-                ["DISABLE_CONSOLE_OUTPUT"] = "true"
-            },
-            Disabled: false,
-            AlwaysAllow: [
-                "search_notes",
-                "read_note",
-                "patch_note",
-                "write_note",
-                "list_directory",
-                "move_note",
-                "read_multiple_notes",
-                "move_file",
-                "update_frontmatter",
-                "get_notes_info",
-                "get_frontmatter",
-                "manage_tags",
-                "get_vault_stats",
-                "list_all_tags"
-            ]
-        );
-
-        McpServers.Add(server);
-        StatusMessage = "Obsidian MCP server added with full permissions. Remember to save.";
-    }
-
-    public void Load()
-    {
-        try
-        {
-            _suppressModelRefresh = true;
-
-            ShowAdvancedNetworkSettings = _settings.ShowAdvancedNetworkSettings;
-            AvailableModels.Clear();
-            var activeLlm = LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName);
-            if (activeLlm != null && !string.IsNullOrWhiteSpace(activeLlm.ModelId))
-            {
-                AvailableModels.Add(activeLlm.ModelId);
-            }
-            PreRollSeconds = _settings.GlobalSettings.PreRollSeconds;
-            CustomSystemMessage = _settings.GlobalSettings.CustomSystemMessage ?? "";
-            WakeWordText = _settings.WakeWords?.FirstOrDefault() ?? "hey quantum";
-            SelectedAudioRouting = _settings.AudioRouting.ToString();
-            LoggingIntervalMinutes = _settings.LoggingInterval.TotalMinutes.ToString("0");
-            SummarizationTriggers = _settings.SummarizationTriggers != null ? string.Join(", ", _settings.SummarizationTriggers) : string.Empty;
-            EnableActivityLogging = _settings.EnableActivityLogging;
-            EnableActivityAnalysis = _settings.EnableActivityAnalysis;
-            UseLocalLlm = _settings.GlobalSettings.UseLocalLlm;
-            UseLocalTts = _settings.GlobalSettings.UseLocalTts;
-            UseOnDeviceStt = _settings.UseOnDeviceStt;
-            SelectedVoiceInputMode = UseOnDeviceStt ? BuiltInAndroidVoiceMode : AiModelVoiceMode;
-            VoiceInputModeDescription = GetVoiceInputModeDescription(UseOnDeviceStt);
-            WhisperModelPath = _settings.WhisperModelPath;
-            ObsidianVaultPath = _settings.ObsidianVaultPath;
-
-            McpServers.Clear();
-            foreach (var server in _settings.McpServers)
-                McpServers.Add(server);
-
-            var obsidianMcp = _settings.McpServers.FirstOrDefault(s => s.Name == "obsidian" && s.Transport == McpTransportType.Stdio);
-            ObsidianMcpPath = obsidianMcp?.Args?.Count > 0 ? obsidianMcp.Args[^1] : _settings.ObsidianVaultPath;
-
-            _debugLogger.Log("SettingsViewModel", $"Loaded structured settings: LLMProvider='{LlmSettings.ActiveProviderName}', STTProvider='{SttSettings.ActiveProviderName}'.", LogLevel.Info);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"SettingsViewModel.Load failed: {ex}");
-            StatusMessage = "Failed to load settings.";
-        }
-        finally
-        {
-            _suppressModelRefresh = false;
-            var activeLlmProvider = LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName);
-            if (activeLlmProvider != null && IsValidAbsoluteUrl(activeLlmProvider.Url))
-            {
-                _ = RefreshModelsAsync();
-            }
-        }
-    }
-
-    private string GetCurrentSvcUrl() => SelectedLlmProvider?.Url ?? "";
-
-    private static List<string> SplitList(string value)
-    {
-        return string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-    }
-
-    private static bool IsValidAbsoluteUrl(string value) =>
-        Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) &&
-        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
-
-    private static string FirstNonEmpty(params string?[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
-
-    private static string GetVoiceInputModeDescription(bool useBuiltIn) => useBuiltIn
-        ? "Uses Android SpeechRecognizer for continuous wake-word dictation. It is fast, but not controlled by VAD/STT model settings."
-        : "Uses the AI audio pipeline: provider-routed VAD plus the configured STT model/endpoint. This disables Android built-in dictation.";
 }

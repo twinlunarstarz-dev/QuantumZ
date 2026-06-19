@@ -17,7 +17,7 @@ public class FluxAssetService(HttpClient httpClient, ISettingsService settings) 
 
     public async ValueTask<string> GenerateAssetAsync(string prompt, string fileName, CancellationToken ct = default)
     {
-        var endpoint = $"{settings.LlmUrl}/images/generations";
+        var endpoint = $"{settings.GetActiveProvider("LLM")?.Url}/images/generations";
         
         var requestBody = new FluxImageRequest(
             prompt: prompt,

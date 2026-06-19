@@ -30,7 +30,7 @@ public class LlamaAIClient(
         Capability: ProviderCapability.Llm,
         Location: ProviderLocation.Hybrid);
 
-    public bool IsReady => !string.IsNullOrWhiteSpace(settings.LlmUrl) || !string.IsNullOrWhiteSpace(LocalBaseUrl);
+    public bool IsReady => !string.IsNullOrWhiteSpace(settings.GetActiveProvider("LLM")?.Url) || !string.IsNullOrWhiteSpace(LocalBaseUrl);
 
     public async ValueTask<bool> IsAvailableAsync(CancellationToken ct = default)
     {
@@ -176,10 +176,14 @@ public class LlamaAIClient(
     {
         var messages = new List<Dictionary<string, object?>>();
 
-        if (!string.IsNullOrWhiteSpace(settings.GlobalSettings.CustomSystemMessage))
-        {
-            messages.Add(new Dictionary<string, object?> { ["role"] = "system", ["content"] = settings.GlobalSettings.CustomSystemMessage });
-        }
+        // request.SystemPrompt (set by AIIntegrationService) takes precedence over the
+        // legacy GlobalSettings.CustomSystemMessage fallback.
+        var systemPrompt = !string.IsNullOrWhiteSpace(request.SystemPrompt)
+            ? request.SystemPrompt
+            : settings.GlobalSettings.CustomSystemMessage;
+
+        if (!string.IsNullOrWhiteSpace(systemPrompt))
+            messages.Add(new Dictionary<string, object?> { ["role"] = "system", ["content"] = systemPrompt });
 
         messages.AddRange(request.History.Select(ToWireMessage));
 
@@ -213,8 +217,21 @@ public class LlamaAIClient(
 
         try
         {
-            var discoveredTools = await mcpOrchestrator.DiscoverToolsAsync(ct);
-            var definitions = discoveredTools
+            IReadOnlyList<McpToolDefinition> tools;
+
+            if (request.AvailableTools is { Count: > 0 })
+            {
+                // Use pre-discovered tools injected by AIIntegrationService — avoids redundant RPC round-trip.
+                tools = request.AvailableTools;
+            }
+            else
+            {
+                // Fallback: discover directly when called outside of AIIntegrationService.
+                var discovered = await mcpOrchestrator.DiscoverToolsAsync(ct);
+                tools = [.. discovered.Select(t => new McpToolDefinition(t.Name, t.Description, t.InputSchemaJson))];
+            }
+
+            var definitions = tools
                 .Where(tool => !string.IsNullOrWhiteSpace(tool.Name))
                 .Select(tool => new Dictionary<string, object?>
                 {
@@ -321,10 +338,10 @@ public class LlamaAIClient(
 
     private async IAsyncEnumerable<LlmExecutionCandidate> GetExecutionCandidatesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
-        var preferred = FirstNonEmpty(settings.SelectedModelName, settings.LlamaModelId);
+        var preferred = settings.GetActiveProvider("LLM")?.ModelId ?? "";
         var registryModel = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Llm, preferred, ct);
         var candidates = new List<LlmExecutionCandidate>();
-        var configuredBaseUrl = NormalizeOpenAiBaseUrl(settings.LlmUrl);
+        var configuredBaseUrl = NormalizeOpenAiBaseUrl(settings.GetActiveProvider("LLM")?.Url ?? "");
 
         if (!string.IsNullOrWhiteSpace(preferred) && !string.IsNullOrWhiteSpace(configuredBaseUrl))
             candidates.Add(new LlmExecutionCandidate(configuredBaseUrl, preferred));

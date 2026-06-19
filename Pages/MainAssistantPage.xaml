@@ -175,17 +175,10 @@
                                             HeightRequest="66"
                                             HorizontalOptions="Center"
                                             VerticalOptions="Center"
-                                            BackgroundColor="{Binding StatusColor, Converter={StaticResource HexToColorConverter}}"
-                                            Opacity="0.68"
+                                            BackgroundColor="{Binding OrbColor}"
+                                            Opacity="{Binding OrbOpacity}"
                                             Stroke="{StaticResource CrimsonTextPrimary}"
                                             StrokeThickness="1">
-                                        <Border.Triggers>
-                                            <DataTrigger TargetType="Border"
-                                                         Binding="{Binding IsDetectingActivity}"
-                                                         Value="True">
-                                                <Setter Property="Opacity" Value="0.95" />
-                                            </DataTrigger>
-                                        </Border.Triggers>
                                         <Border.StrokeShape>
                                             <RoundRectangle CornerRadius="33" />
                                         </Border.StrokeShape>
@@ -217,7 +210,7 @@
                         </Grid>
 
                         <VerticalStackLayout Grid.Row="1" HorizontalOptions="Center" Spacing="3">
-                            <Label Text="{Binding AiStatusText}"
+                            <Label Text="{Binding StatusText}"
                                    Style="{StaticResource CyberLabelTitle}"
                                    FontSize="16"
                                    HorizontalOptions="Center" />

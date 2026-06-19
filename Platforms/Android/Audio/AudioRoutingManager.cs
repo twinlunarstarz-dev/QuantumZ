@@ -5,7 +5,7 @@ using QuantumZ.Core.Models.Settings;
 
 namespace QuantumZ.Android.Audio;
 
-public sealed class AudioRoutingManager : Java.Lang.Object, AudioManager.IOnCommunicationDeviceChangedListener
+public sealed class AudioRoutingManager : Java.Lang.Object, AudioManager.IOnCommunicationDeviceChangedListener, IDisposable
 {
     private readonly AudioManager _audioManager;
     private readonly ISettingsService _settings;
@@ -28,6 +28,40 @@ public sealed class AudioRoutingManager : Java.Lang.Object, AudioManager.IOnComm
     }
 
     public void ApplyRoutingPreference()
+    {
+        ApplyOutputMode(_settings.VoiceAssistantSettings.AudioOutput);
+    }
+
+    public void ApplyOutputMode(AudioOutputMode mode)
+    {
+        switch (mode)
+        {
+            case AudioOutputMode.Speaker:
+                ForceSpeaker();
+                break;
+            case AudioOutputMode.Bluetooth:
+            case AudioOutputMode.Headset:
+                ForceHeadsetOrBluetooth();
+                break;
+            case AudioOutputMode.Auto:
+            default:
+                ApplyDynamicRouting();
+                break;
+        }
+    }
+
+    public void RestoreDefaultRouting()
+    {
+        if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.S)
+        {
+            _audioManager.ClearCommunicationDevice();
+        }
+
+        _audioManager.SpeakerphoneOn = false;
+        _audioManager.Mode = Mode.Normal;
+    }
+
+    public void ApplyLegacyRoutingPreference()
     {
         var preference = _settings.AudioRouting;
 
@@ -141,5 +175,7 @@ public sealed class AudioRoutingManager : Java.Lang.Object, AudioManager.IOnComm
         {
             _audioManager.RemoveOnCommunicationDeviceChangedListener(this);
         }
+
+        GC.SuppressFinalize(this);
     }
 }

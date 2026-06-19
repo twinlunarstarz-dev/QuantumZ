@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using QuantumZ.Android.Audio;
 using QuantumZ.Core.Interfaces;
+using QuantumZ.Core.Models;
 using QuantumZ.Infrastructure.Services;
 using QuantumZ.Android.Services;
 
@@ -20,19 +22,32 @@ public static class ServiceRegistration
         services.AddTransient<ILlmProvider>(sp => sp.GetRequiredService<LlamaAIClient>());
         services.AddHttpClient<IMcpOrchestrator, McpOrchestrator>();
 
-        // Audio engines
+        // Audio engines - STT
         services.AddHttpClient<RemoteSttEngine>();
+        services.AddTransient<ISttProvider>(sp => sp.GetRequiredService<RemoteSttEngine>());
         services.AddSingleton<ISttEngine>(sp => sp.GetRequiredService<RemoteSttEngine>());
-        services.AddTransient<ISttProvider, WhisperLocalSttProvider>();
-        services.AddTransient<ISttProvider>(sp => (ISttProvider)sp.GetRequiredService<ISttEngine>());
+
+        services.AddSingleton<WhisperLocalSttProvider>();
+        services.AddTransient<ISttProvider>(sp => sp.GetRequiredService<WhisperLocalSttProvider>());
+
+        // Audio engines - TTS
         services.AddHttpClient<TtsService>();
-        services.AddTransient<ITtsProvider, LocalAiTtsProvider>();
         services.AddTransient<ITtsProvider>(sp => sp.GetRequiredService<TtsService>());
+
+        services.AddSingleton<LocalAiTtsProvider>();
+        services.AddTransient<ITtsProvider>(sp => sp.GetRequiredService<LocalAiTtsProvider>());
+
         services.AddSingleton<AndroidTtsEngine>();
         services.AddSingleton<ITtsEngine>(sp => sp.GetRequiredService<AndroidTtsEngine>());
-        services.AddSingleton<ITtsProvider>(sp => sp.GetRequiredService<AndroidTtsEngine>());
+        services.AddTransient<ITtsProvider>(sp => sp.GetRequiredService<AndroidTtsEngine>());
+        services.AddSingleton<AudioRoutingManager>(sp =>
+            new AudioRoutingManager(global::Android.App.Application.Context, sp.GetRequiredService<ISettingsService>()));
         services.AddSingleton<IThermalMonitor>(sp =>
             new AndroidThermalMonitorService(global::Android.App.Application.Context, sp.GetService<IDebugLogger>()));
+        services.AddSingleton<IWakeWordProvider>(sp =>
+            WakeWordProviderFactory.Create(
+                sp.GetRequiredService<ISettingsService>(),
+                sp.GetRequiredService<IDebugLogger>()));
         services.AddSingleton<IVadProvider, RmsVadProvider>();
         services.AddSingleton<IProviderRouter, ProviderRouter>();
 
@@ -43,6 +58,8 @@ public static class ServiceRegistration
         // Visualizer & Speech State
         services.AddSingleton<IAudioVisualizer, AudioVisualizerService>();
         services.AddSingleton<ISpeechStateService, SpeechStateService>();
+        services.AddSingleton<IPipelineStateService, PipelineStateService>();
+        services.AddSingleton<IAudioRingBuffer>(_ => new AudioRingBuffer(capacitySeconds: 10f, sampleRate: 16000));
 
         // Logging & Memory
         services.AddSingleton<IDebugLogger, DebugLoggerService>();
@@ -53,6 +70,9 @@ public static class ServiceRegistration
 
         // Whisper model downloader
         services.AddSingleton<WhisperModelDownloader>();
+
+        // V2 Pipeline Controller — transient so each service start gets a clean instance
+        services.AddTransient<MicrophonePipelineController>();
 
         return services;
     }

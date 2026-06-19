@@ -30,4 +30,8 @@
     <PackageReference Include="Xamarin.AndroidX.Core" Version="1.17.0" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android36.0'">
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
+  </ItemGroup>
+
 </Project>

@@ -10,15 +10,10 @@ public interface ISettingsService
     ServiceProviderSettings SttSettings { get; set; }
     ServiceProviderSettings TtsSettings { get; set; }
 
+    // Provider Accessor
+    ProviderConfig? GetActiveProvider(string service);
+
     // Compatibility Properties for existing services (Proxy to active providers)
-    string LlmUrl { get; }
-    string VadUrl { get; }
-    string SttUrl { get; }
-    string TtsUrl { get; }
-    string LlamaModelId { get; set; }
-    string SelectedModelName { get; set; }
-    string SttModelId { get; set; }
-    string TtsModelId { get; set; }
     List<string> WakeWords { get; set; }
 
     // MCP Settings
@@ -35,6 +30,7 @@ public interface ISettingsService
 
     // On-Device STT
     bool UseOnDeviceStt { get; set; }
+    bool UseLocalTts { get; set; }
     string WhisperModelPath { get; set; }
 
     // UI Settings
@@ -44,6 +40,13 @@ public interface ISettingsService
 
     // Obsidian Memory
     string ObsidianVaultPath { get; set; }
+
+    // V2 Pipeline Settings
+    /// <summary>Gets or sets the V2 pipeline stage configuration.</summary>
+    PipelineSettings PipelineSettings { get; set; }
+
+    /// <summary>Gets or sets the voice assistant behavioral settings.</summary>
+    VoiceAssistantSettings VoiceAssistantSettings { get; set; }
 
     // Reactive Update Event
     event Action<ISettingsService>? SettingsChanged;

@@ -1,717 +1,79 @@
-# QuantumZ
+# QuantumZ Architecture (V2)
 
-## Architecture.md
+## Pipeline Flow
 
-Version: 1.0
-Platform: .NET 10 MAUI
-Primary Target: Android
-Secondary Targets: Windows, Linux, macOS
+Mic (16kHz PCM) → RingBuffer → IWakeWordProvider (80ms chunks)
+→ [Trigger Detected] → Snapshot preroll + accumulate query
+→ IVadProvider detects end-of-speech
+→ IProviderRouter.TranscribeAsync (STT)
+→ IAIIntegrationService.ExecutePromptAsync (LLM + MCP tools)
+→ IProviderRouter.SynthesizeAsync (TTS)
+→ AudioRoutingManager → AudioOutput
 
----
+## Settings V2
 
-# Vision
+PipelineSettings: per-stage (WakeWord/VAD/STT/LLM/TTS) with Remote|Local|BuiltIn modes.
 
-TwinFinZ Assistant is a next-generation AI companion platform designed to operate seamlessly across fully offline and cloud-enhanced environments.
+VoiceAssistantSettings: TriggerPhrase, SystemPrompt, PreRollSeconds, PostSilenceSeconds, WakeWordThreshold, AudioOutput, and MaxToolCallIterations.
 
-The system must:
+## Pipeline States
 
-* Work entirely offline
-* Operate locally on Android devices
-* Integrate with powerful remote AI servers
-* Support dynamic model loading
-* Support MCP tools
-* Support voice-first interactions
-* Remain provider agnostic
-* Remain future-proof as models evolve
+Idle → ListeningForTrigger → TriggerDetected → RecordingQuery
+→ ProcessingSTT → ProcessingLLM → Speaking → ListeningForTrigger
 
----
+Recoverable failures transition to Error and then auto-recover to ListeningForTrigger when possible.
 
-# Core Design Principles
+## Key New Files (V2)
 
-## Offline First
+- Core/Models/PipelineState.cs — 8-state enum
+- Core/Models/AudioRingBuffer.cs — ring buffer
+- Core/Interfaces/IWakeWordProvider.cs — wake word interface
+- Core/Interfaces/IPipelineStateService.cs — state machine interface
+- Infrastructure/Services/PipelineStateService.cs — state machine
+- Infrastructure/Services/OnnxWakeWordProvider.cs — ONNX wake word
+- Infrastructure/Services/RmsWakeWordProvider.cs — RMS fallback
+- Platforms/Android/Services/MicrophonePipelineController.cs — pipeline logic
+- Platforms/Android/Audio/AudioRoutingManager.cs — Android output routing for TTS
+- ViewModels/AssistantAnimationViewModel.cs — 8-state orb animations
 
-Every core capability must function without internet access.
+## Android Audio Capture and Routing
 
-## Remote Enhanced
+The Android foreground service owns only platform service lifecycle concerns and delegates pipeline behavior to MicrophonePipelineController.
 
-When connectivity exists, more capable providers may be used automatically.
+MicrophonePipelineController initializes IWakeWordProvider before opening the continuous audio loop, records 16kHz PCM16 mono chunks through AudioRecord, writes every chunk to AudioRingBuffer, evaluates wake-word frames locally, and only invokes STT after a trigger and VAD-confirmed end-of-speech.
 
-## Provider Agnostic
+TTS output routing is applied immediately before synthesis/playback using VoiceAssistantSettings.AudioOutput:
 
-No feature may depend on:
+- Auto: prefer Bluetooth, then wired headset, then speaker.
+- Speaker: force built-in speaker where available.
+- Bluetooth: prefer Bluetooth output and use assistant/media audio attributes for WAV playback.
+- Headset: prefer Bluetooth or wired headset and fall back to speaker.
 
-* Specific model names
-* Specific model vendors
-* Specific inference engines
+After TTS playback completes or fails, routing is restored to the default microphone/listening mode.
 
-All interactions occur through capability interfaces.
+## TTS Playback
 
-## Dynamic Discovery
+IProviderRouter.SynthesizeAsync returns provider-specific audio bytes or an empty byte array for built-in Android TTS.
 
-Models and providers are discovered at runtime.
+- AndroidTtsEngine self-plays through Android TextToSpeech and returns an empty byte array after utterance completion.
+- Remote TtsService returns audio bytes from an OpenAI-compatible audio/speech endpoint.
+- LocalAiTtsProvider returns WAV bytes produced by local Piper/Kokoro-style synthesis.
 
----
+Non-empty TTS bytes are written to a temporary WAV file in the MAUI cache directory and played with Android MediaPlayer using speech audio attributes. Empty bytes are treated as the built-in TTS self-play path.
 
-# Application Architecture
+## AI and MCP Integration
 
-```text
-User
- │
- ▼
-Assistant Shell
- │
- ├── UI Engine
- ├── Audio Engine
- ├── Conversation Engine
- ├── Tool Engine
- ├── Memory Engine
- ├── Provider Router
- └── Model Registry
+AIIntegrationService resolves the system prompt from the incoming AiRequest first, then VoiceAssistantSettings.SystemPrompt. It discovers MCP tools once per assistant request and carries the resolved system prompt and available tool list through the LLM tool-call loop.
 
-Provider Router
- │
- ├── Local Providers
- └── Remote Providers
-```
+LlamaAIClient sends OpenAI-compatible chat completions to configured providers, builds a system/user/history message array, and avoids hardcoded LAN endpoints. Runtime endpoints come from settings/model registry/local llama manager configuration.
 
----
+## Dependency Direction
 
-# UI Design System
+Dependencies continue to flow inward:
 
-## Theme
+- UI depends on Core abstractions and Infrastructure services.
+- Infrastructure implements Core interfaces and does not depend on UI.
+- Android platform services depend on Core abstractions plus Android APIs.
+- Core contains models and interfaces only.
 
-Codename: Crimson Nexus
-
-Inspired By:
-
-* Aerospace HUDs
-* Tactical displays
-* Cyberpunk control systems
-* Sci-fi command centers
-
----
-
-## Color Palette
-
-Background
-
-#0A0A0A
-
-Surface
-
-#111111
-
-Elevated Surface
-
-#1A1A1A
-
-Primary Accent
-
-#FF003C
-
-Secondary Accent
-
-#FF335F
-
-Success
-
-#00FF88
-
-Warning
-
-#FFB300
-
-Error
-
-#FF3355
-
-Text Primary
-
-#FFFFFF
-
-Text Secondary
-
-#AAAAAA
-
----
-
-## Visual Elements
-
-* Glassmorphism
-* Soft neon glow
-* Streaming token animations
-* Voice waveform visualizer
-* Circular listening indicators
-* Animated assistant orb
-* Dynamic model status indicators
-* GPU/server monitoring panels
-
----
-
-# Audio Engine
-
-Handles all voice functionality.
-
----
-
-## Audio Capture
-
-Supports:
-
-* Internal microphone
-* Bluetooth audio devices
-* Wired headsets
-
----
-
-## Voice Activity Detection
-
-Interface:
-
-```csharp
-IVadProvider
-```
-
-Supported Providers:
-
-* Silero VAD
-* WebRTC VAD
-
-Default:
-
-Silero VAD
-
-Purpose:
-
-Detect speech start and stop events.
-
----
-
-## Speech To Text
-
-Interface:
-
-```csharp
-ISttProvider
-```
-
-Local Providers:
-
-* whisper.cpp
-
-Remote Providers:
-
-* OpenAI Whisper
-* Azure Speech
-* FasterWhisper APIs
-* Custom APIs
-
-Recommended Local Model:
-
-Whisper Small
-
----
-
-## Text To Speech
-
-Interface:
-
-```csharp
-ITtsProvider
-```
-
-Built-In Providers:
-
-* Android TTS
-
-Local AI Providers:
-
-* Kokoro
-* Piper
-
-Remote Providers:
-
-* ElevenLabs
-* OpenAI TTS
-* Azure Speech
-* Cartesia
-* Custom APIs
-
-Selection Order:
-
-1. User Selection
-2. Local AI
-3. Android TTS
-4. Remote Provider
-
----
-
-# Conversation Engine
-
-Responsible for:
-
-* Prompt construction
-* Chat management
-* Tool orchestration
-* Streaming responses
-* Context assembly
-
-Interface:
-
-```csharp
-IConversationProvider
-```
-
----
-
-# LLM Engine
-
-Interface:
-
-```csharp
-ILlmProvider
-```
-
-Supported Engines:
-
-* llama.cpp
-* OpenAI-compatible APIs
-* Future providers
-
----
-
-# Mobile Quantization Policy
-
-All local mobile models must default to Q4 quantization.
-
-Preferred:
-
-* Q4_K_M
-* Q4_K_S
-* IQ4_XS
-* IQ4_NL
-
-Disallowed By Default:
-
-* FP16
-* BF16
-* Q8
-
-Reason:
-
-Provides optimal balance of:
-
-* Quality
-* RAM usage
-* Battery life
-* Thermal performance
-
----
-
-# Dynamic Model Registry
-
-The application never depends on a specific model.
-
-Instead:
-
-```text
-Registry
- │
- ├── VAD Models
- ├── STT Models
- ├── LLM Models
- ├── Embedding Models
- ├── Reranker Models
- ├── TTS Models
- └── Vision Models
-```
-
----
-
-# Supported Local LLM Families
-
-Examples:
-
-* Gemma 4
-* Gemma 3
-* Qwen 3
-* Phi
-* Llama
-* DeepSeek Distill
-
-The registry dynamically discovers:
-
-* Installed models
-* Downloadable models
-* Remote models
-
----
-
-# Model Discovery
-
-Sources:
-
-* Local storage
-* llama.cpp registry
-* User catalogs
-* Remote APIs
-* MCP providers
-
-Startup Flow:
-
-```text
-Launch
-  ↓
-Discover Models
-  ↓
-Benchmark Models
-  ↓
-Build Capability Graph
-  ↓
-Ready
-```
-
----
-
-# Provider Router
-
-Central intelligence layer.
-
-Responsibilities:
-
-* Network awareness
-* Battery awareness
-* Thermal awareness
-* Latency monitoring
-* Failover management
-* Cost management
-
----
-
-# Example Routing
-
-Offline:
-
-```text
-Silero
-  ↓
-Whisper
-  ↓
-Gemma 4 E4B Q4
-  ↓
-Kokoro
-```
-
-Online:
-
-```text
-Silero
-  ↓
-Whisper Small
-  ↓
-Remote Gemma 4 31B
-  ↓
-Kokoro
-```
-
----
-
-# Tool Engine
-
-Interface:
-
-```csharp
-IToolProvider
-```
-
-Capabilities:
-
-* Android Intents
-* Local Automation
-* MCP
-* REST APIs
-* Device Controls
-
-Examples:
-
-* Send SMS
-* Launch App
-* Open Navigation
-* Query Home Assistant
-* Control Smart Devices
-
----
-
-# MCP Engine
-
-Full Model Context Protocol support.
-
-Supported Transports:
-
-* STDIO
-* HTTP
-* SSE
-* WebSocket
-
-Examples:
-
-* Filesystem
-* GitHub
-* Home Assistant
-* Jellyfin
-* Custom Servers
-
----
-
-# Memory Engine
-
-Stores:
-
-* Conversations
-* User Preferences
-* Tool Results
-* Summaries
-
-Layers:
-
-Short-Term Memory
-
-Current conversation.
-
-Long-Term Memory
-
-Persistent storage.
-
-Vector Memory
-
-Semantic retrieval.
-
----
-
-# Embedding Engine
-
-Interface:
-
-```csharp
-IEmbeddingProvider
-```
-
-Examples:
-
-* BGE
-* Nomic
-* Qwen Embeddings
-* Future Providers
-
-Uses:
-
-* Memory retrieval
-* RAG
-* Search
-* Context building
-
----
-
-# Reranker Engine
-
-Interface:
-
-```csharp
-IRerankerProvider
-```
-
-Examples:
-
-* BGE Reranker
-* Qwen Reranker
-* Future Providers
-
-Uses:
-
-* Memory ranking
-* Search quality
-* Context optimization
-
----
-
-# Local Storage Layout
-
-```text
-AppData/
-
-models/
-  llm/
-
-stt/
-  whisper/
-
-tts/
-  kokoro/
-  piper/
-
-vad/
-  silero/
-
-embeddings/
-
-rerankers/
-
-memory/
-
-logs/
-
-cache/
-
-mcp/
-```
-
----
-
-# Model Marketplace
-
-Users can:
-
-* Browse models
-* Download models
-* Update models
-* Remove models
-* Pin versions
-
-Features:
-
-* SHA verification
-* Resume downloads
-* Delta updates
-* Storage analysis
-
----
-
-# Model Profiles
-
-Example:
-
-```json
-{
-  "id": "gemma-4-e4b",
-  "quantization": "Q4_K_M",
-  "provider": "llama.cpp",
-  "supportsToolCalling": true,
-  "supportsVision": true,
-  "contextLength": 131072,
-  "local": true
-}
-```
-
----
-
-# Thermal Protection
-
-Monitors:
-
-* Battery temperature
-* CPU temperature
-* GPU temperature
-
-Automatic Downgrade Path:
-
-```text
-31B Remote
-    ↓
-12B Remote
-    ↓
-E4B Local
-    ↓
-Phi Mini
-```
-
----
-
-# Security
-
-No telemetry by default.
-
-Encrypted:
-
-* API keys
-* Memory database
-* Configuration
-
-Supports:
-
-* Biometrics
-* Secure storage
-* Certificate validation
-
----
-
-# Performance Targets
-
-Cold Start
-
-< 2 seconds
-
-Speech Detection
-
-< 100 ms
-
-Wake Response
-
-< 300 ms
-
-First Token
-
-< 500 ms local
-
-Provider Failover
-
-< 1 second
-
----
-
-# Future Roadmap
-
-Phase 1
-
-* Offline Assistant
-* llama.cpp
-* whisper.cpp
-* Kokoro
-* Silero
-
-Phase 2
-
-* MCP
-* Memory
-* Tool Calling
-
-Phase 3
-
-* Vision
-* Screen Understanding
-* Workflow Engine
-
-Phase 4
-
-* Multi-Agent Systems
-* Desktop Companion
-* Wearables
-
-Phase 5
-
-* Distributed AI Mesh
-* Vehicle Integration
-* Ambient Computing
-
----
-
-# Final Requirement
-
-Every subsystem must be replaceable.
-
-Models are replaceable.
-
-Providers are replaceable.
-
-Inference engines are replaceable.
-
-The architecture must remain functional regardless of future changes in the AI ecosystem.
+No circular references are allowed.

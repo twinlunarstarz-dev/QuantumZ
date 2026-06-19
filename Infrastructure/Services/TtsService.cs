@@ -24,7 +24,7 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
         Capability: ProviderCapability.Tts,
         Location: ProviderLocation.Remote);
 
-    public bool IsReady => !string.IsNullOrWhiteSpace(settings.TtsUrl);
+    public bool IsReady => !string.IsNullOrWhiteSpace(settings.GetActiveProvider("TTS")?.Url);
 
     public async ValueTask<bool> IsAvailableAsync(CancellationToken ct = default)
     {
@@ -48,12 +48,12 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
 
     public async ValueTask<byte[]> SynthesizeAsync(string text, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(settings.TtsUrl))
+        if (string.IsNullOrWhiteSpace(settings.GetActiveProvider("TTS")?.Url))
             throw new InvalidOperationException("TTS server URL is not configured.");
 
         var selected = await ResolveRemoteModelAsync(ct);
-        var modelId = FirstNonEmpty(selected?.Id, settings.TtsModelId, "tts-default")!;
-        var baseUrl = selected?.Endpoint ?? settings.TtsUrl;
+        var modelId = FirstNonEmpty(selected?.Id, settings.GetActiveProvider("TTS")?.ModelId ?? "", "tts-default")!;
+        var baseUrl = selected?.Endpoint ?? settings.GetActiveProvider("TTS")?.Url ?? "";
         var endpoint = BuildEndpoint(baseUrl, "audio/speech");
 
         var requestBody = new TtsRequest(
@@ -84,7 +84,7 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
     private async ValueTask<string> ResolveRemoteBaseUrlAsync(CancellationToken ct)
     {
         var selected = await ResolveRemoteModelAsync(ct);
-        return selected?.Endpoint ?? settings.TtsUrl;
+        return selected?.Endpoint ?? settings.GetActiveProvider("TTS")?.Url ?? "";
     }
 
     private async ValueTask<ModelProfile?> ResolveRemoteModelAsync(CancellationToken ct)
@@ -92,7 +92,7 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
         var models = await modelRegistry.GetModelsAsync(ProviderCapability.Tts, ct);
         return models
             .Where(model => model.Location is ProviderLocation.Remote or ProviderLocation.Hybrid)
-            .OrderBy(model => ModelMatchesSelection(model, settings.TtsModelId) ? 0 : 1)
+            .OrderBy(model => ModelMatchesSelection(model, settings.GetActiveProvider("TTS")?.ModelId ?? "") ? 0 : 1)
             .ThenBy(model => model.DisplayName, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
     }

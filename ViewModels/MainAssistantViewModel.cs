@@ -8,7 +8,7 @@ using QuantumZ.UI.Pages;
 
 namespace QuantumZ.UI.ViewModels;
 
-public class MainAssistantViewModel(
+public partial class MainAssistantViewModel(
     IFluxAssetService assetService,
     IServiceProvider serviceProvider,
     IAudioVisualizer audioVisualizer,
@@ -26,7 +26,8 @@ public class MainAssistantViewModel(
     WhisperModelDownloader whisperDownloader,
     ISpeechStateService speechStateService,
     IThermalMonitor thermalMonitor,
-    IDebugLogger debugLogger) : BaseViewModel
+    IDebugLogger debugLogger,
+    IPipelineStateService pipelineStateService) : BaseViewModel
 {
     private readonly IFluxAssetService _assetService = assetService ?? throw new ArgumentNullException(nameof(assetService));
     private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
@@ -46,6 +47,7 @@ public class MainAssistantViewModel(
     private readonly ISpeechStateService _speechStateService = speechStateService ?? throw new ArgumentNullException(nameof(speechStateService));
     private readonly IThermalMonitor _thermalMonitor = thermalMonitor ?? throw new ArgumentNullException(nameof(thermalMonitor));
     private readonly IDebugLogger _debugLogger = debugLogger ?? throw new ArgumentNullException(nameof(debugLogger));
+    private readonly IPipelineStateService _pipelineStateService = pipelineStateService ?? throw new ArgumentNullException(nameof(pipelineStateService));
     private DateTime _lastServiceHealthRefreshUtc = DateTime.MinValue;
     private bool _serviceHealthRefreshInFlight;
     private bool _startupMonitorAttempted;
@@ -226,21 +228,6 @@ public class MainAssistantViewModel(
         set => SetProperty(ref _isBusy, value);
     }
 
-    private ICommand? _toggleListeningCommand;
-    public ICommand ToggleListeningCommand => _toggleListeningCommand ??= new AsyncRelayCommand(ToggleListeningAsync);
-
-    private ICommand? _stopListeningCommand;
-    public ICommand StopListeningCommand => _stopListeningCommand ??= new RelayCommand(StopListening);
-
-    private ICommand? _navigateToSettingsCommand;
-    public ICommand NavigateToSettingsCommand => _navigateToSettingsCommand ??= new AsyncRelayCommand(NavigateToSettingsAsync);
-
-    private ICommand? _navigateToMemoryCommand;
-    public ICommand NavigateToMemoryCommand => _navigateToMemoryCommand ??= new AsyncRelayCommand(NavigateToMemoryAsync);
-
-    private ICommand? _navigateToDebugCommand;
-    public ICommand NavigateToDebugCommand => _navigateToDebugCommand ??= new AsyncRelayCommand(NavigateToDebugAsync);
-
     private bool _isDetailViewOpen;
     public bool IsDetailViewOpen
     {
@@ -262,6 +249,29 @@ public class MainAssistantViewModel(
         set => SetProperty(ref _isConfigViewOpen, value);
     }
 
+    private PipelineState _currentState;
+    /// <summary>Current voice-pipeline state; updated by <see cref="OnPipelineStateChanged"/>.</summary>
+    public PipelineState CurrentState
+    {
+        get => _currentState;
+        set => SetProperty(ref _currentState, value);
+    }
+
+    private ICommand? _toggleListeningCommand;
+    public ICommand ToggleListeningCommand => _toggleListeningCommand ??= new AsyncRelayCommand(ToggleListeningAsync);
+
+    private ICommand? _stopListeningCommand;
+    public ICommand StopListeningCommand => _stopListeningCommand ??= new RelayCommand(StopListening);
+
+    private ICommand? _navigateToSettingsCommand;
+    public ICommand NavigateToSettingsCommand => _navigateToSettingsCommand ??= new AsyncRelayCommand(NavigateToSettingsAsync);
+
+    private ICommand? _navigateToMemoryCommand;
+    public ICommand NavigateToMemoryCommand => _navigateToMemoryCommand ??= new AsyncRelayCommand(NavigateToMemoryAsync);
+
+    private ICommand? _navigateToDebugCommand;
+    public ICommand NavigateToDebugCommand => _navigateToDebugCommand ??= new AsyncRelayCommand(NavigateToDebugAsync);
+
     private ICommand? _toggleDetailCommand;
     public ICommand ToggleDetailCommand => _toggleDetailCommand ??= new RelayCommand(ToggleDetail);
 
@@ -276,6 +286,15 @@ public class MainAssistantViewModel(
 
     private ICommand? _refreshServiceHealthCommand;
     public ICommand RefreshServiceHealthCommand => _refreshServiceHealthCommand ??= new AsyncRelayCommand(RefreshServiceHealthAsync);
+
+    private ICommand? _summarizeNowCommand;
+    public ICommand SummarizeNowCommand => _summarizeNowCommand ??= new AsyncRelayCommand(SummarizeNowAsync);
+
+    private ICommand? _analyzeNowCommand;
+    public ICommand AnalyzeNowCommand => _analyzeNowCommand ??= new AsyncRelayCommand(AnalyzeNowAsync);
+
+    private ICommand? _testPipelineCommand;
+    public ICommand TestPipelineCommand => _testPipelineCommand ??= new AsyncRelayCommand(TestPipelineAsync);
 
     private void ToggleDetail()
     {
@@ -353,15 +372,6 @@ public class MainAssistantViewModel(
         }
     }
 
-    private ICommand? _summarizeNowCommand;
-    public ICommand SummarizeNowCommand => _summarizeNowCommand ??= new AsyncRelayCommand(SummarizeNowAsync);
-
-    private ICommand? _analyzeNowCommand;
-    public ICommand AnalyzeNowCommand => _analyzeNowCommand ??= new AsyncRelayCommand(AnalyzeNowAsync);
-
-    private ICommand? _testPipelineCommand;
-    public ICommand TestPipelineCommand => _testPipelineCommand ??= new AsyncRelayCommand(TestPipelineAsync);
-
     public void AttachVisualizerEvents()
     {
         _audioVisualizer.AudioLevelChanged += OnAudioLevelChanged;
@@ -369,6 +379,8 @@ public class MainAssistantViewModel(
         _audioVisualizer.ActivityDetectedChanged += OnActivityDetectedChanged;
         _speechStateService.TranscriptionChanged += OnTranscriptionChanged;
         _thermalMonitor.StateChanged += OnThermalStateChanged;
+        _pipelineStateService.StateChanged += OnPipelineStateChanged;
+        ApplyStateAnimation(_pipelineStateService.CurrentState);
         _ = RefreshHudTelemetryAsync();
         _ = RefreshMemoryTelemetryAsync();
         _ = RefreshServiceHealthAsync(force: false);
@@ -381,6 +393,7 @@ public class MainAssistantViewModel(
         _audioVisualizer.ActivityDetectedChanged -= OnActivityDetectedChanged;
         _speechStateService.TranscriptionChanged -= OnTranscriptionChanged;
         _thermalMonitor.StateChanged -= OnThermalStateChanged;
+        _pipelineStateService.StateChanged -= OnPipelineStateChanged;
     }
 
     private void OnAudioLevelChanged(object? sender, double level)
@@ -445,6 +458,16 @@ public class MainAssistantViewModel(
             LastTranscription = text;
             TranscriptionStatusText = "LIVE STT STREAM";
             StreamingTranscriptDisplay = $"{text.Trim()} ▌";
+        });
+    }
+
+    /// <summary>Reacts to pipeline state changes; updates <see cref="CurrentState"/> and triggers orb animation.</summary>
+    private void OnPipelineStateChanged(object? sender, PipelineStateChangedArgs args)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            CurrentState = args.Current;
+            ApplyStateAnimation(args.Current);
         });
     }
 
@@ -520,10 +543,15 @@ public class MainAssistantViewModel(
             {
                 await Application.Current.MainPage.Navigation.PushAsync(page);
             }
+            else
+            {
+                throw new InvalidOperationException("MainPage navigation is not available.");
+            }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Navigation to settings failed: {ex}");
+            _debugLogger.Log("MainAssistant", $"Navigation to settings failed: {ex.Message}", LogLevel.Error);
+            await _dialogService.ShowAlertAsync("Navigation Error", "Unable to open settings page.");
         }
     }
 
@@ -536,10 +564,15 @@ public class MainAssistantViewModel(
             {
                 await Application.Current.MainPage.Navigation.PushAsync(page);
             }
+            else
+            {
+                throw new InvalidOperationException("MainPage navigation is not available.");
+            }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Navigation to memory failed: {ex}");
+            _debugLogger.Log("MainAssistant", $"Navigation to memory failed: {ex.Message}", LogLevel.Error);
+            await _dialogService.ShowAlertAsync("Navigation Error", "Unable to open memory page.");
         }
     }
 
@@ -552,10 +585,15 @@ public class MainAssistantViewModel(
             {
                 await Application.Current.MainPage.Navigation.PushAsync(page);
             }
+            else
+            {
+                throw new InvalidOperationException("MainPage navigation is not available.");
+            }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Navigation to debug failed: {ex}");
+            _debugLogger.Log("MainAssistant", $"Navigation to debug failed: {ex.Message}", LogLevel.Error);
+            await _dialogService.ShowAlertAsync("Navigation Error", "Unable to open debug overlay.");
         }
     }
 
@@ -648,21 +686,21 @@ public class MainAssistantViewModel(
             var localCount = models.Count(model => model.Location is ProviderLocation.Local or ProviderLocation.BuiltIn);
             var localServerOnline = await _llamaLocalManager.CheckHealthAsync();
             var localBinaryAvailable = _llamaLocalManager.IsBinaryAvailable();
-            var selectedModel = FirstNonEmpty(_settingsService.SelectedModelName, _settingsService.LlamaModelId);
+            var selectedModel = _settingsService.GetActiveProvider("LLM")?.ModelId ?? "";
             var selectedProfile = models.FirstOrDefault(model => !string.IsNullOrWhiteSpace(selectedModel) && ModelMatchesSelection(model, selectedModel));
 
             ActiveModelName = FirstNonEmpty(selectedProfile?.DisplayName, llmModel?.DisplayName, selectedModel, "No reachable LLM model");
-            ModelEndpointText = FirstNonEmpty(selectedProfile?.Endpoint, llmModel?.Endpoint, _settingsService.LlmUrl, localServerOnline ? ModelRegistry.LocalLlamaBaseUrl : "No reachable endpoint");
+            ModelEndpointText = FirstNonEmpty(selectedProfile?.Endpoint, llmModel?.Endpoint, _settingsService.GetActiveProvider("LLM")?.Url ?? "", localServerOnline ? ModelRegistry.LocalLlamaBaseUrl : "No reachable endpoint");
             ServerHealthText = remoteCount > 0 ? "REMOTE SERVER ONLINE" : localServerOnline ? "LOCAL LLAMA SERVER ONLINE" : "LLM SERVER OFFLINE";
             GpuStatusText = remoteCount > 0 ? "GPU SERVER ROUTE READY" : localServerOnline ? "LOCAL CPU ROUTE READY" : localBinaryAvailable ? "LOCAL BINARY READY / SERVER STOPPED" : "LOCAL BINARY MISSING";
-            ConfigVoiceRouteText = $"Wake word: {FirstNonEmpty(_settingsService.WakeWords.FirstOrDefault(), "hey quantum")} • Audio: {_settingsService.AudioRouting} • STT: {(_settingsService.UseOnDeviceStt ? "On-device Whisper" : ShortenEndpoint(_settingsService.SttUrl))}";
+            ConfigVoiceRouteText = $"Wake word: {FirstNonEmpty(_settingsService.WakeWords.FirstOrDefault(), "hey quantum")} • Audio: {_settingsService.AudioRouting} • STT: {(_settingsService.UseOnDeviceStt ? "On-device Whisper" : ShortenEndpoint(_settingsService.GetActiveProvider("STT")?.Url ?? ""))}";
 
             ReplaceMetrics(ModelStatusItems,
             [
-                new HudMetric("VAD", DescribeEndpoint(_settingsService.VadUrl, "Local RMS"), "#00FF88"),
-                new HudMetric("STT", FirstNonEmpty(_settingsService.SttModelId, "Provider default"), "#FF003C"),
+                new HudMetric("VAD", DescribeEndpoint(_settingsService.GetActiveProvider("VAD")?.Url ?? "", "Local RMS"), "#00FF88"),
+                new HudMetric("STT", FirstNonEmpty(_settingsService.GetActiveProvider("STT")?.ModelId, "Provider default"), "#FF003C"),
                 new HudMetric("LLM", ActiveModelName, "#FF335F"),
-                new HudMetric("TTS", FirstNonEmpty(_settingsService.TtsModelId, "Provider default"), "#FFB300")
+                new HudMetric("TTS", FirstNonEmpty(_settingsService.GetActiveProvider("TTS")?.ModelId, "Provider default"), "#FFB300")
             ]);
 
             var thermal = _thermalMonitor.CurrentState;
@@ -691,7 +729,7 @@ public class MainAssistantViewModel(
             [
                 new HudMetric("VAD", "Configured", "#FFB300"),
                 new HudMetric("STT", "Configured", "#FFB300"),
-                new HudMetric("LLM", FirstNonEmpty(_settingsService.SelectedModelName, _settingsService.LlamaModelId, "Unknown"), "#FFB300"),
+                new HudMetric("LLM", FirstNonEmpty(_settingsService.GetActiveProvider("LLM")?.ModelId, "Unknown"), "#FFB300"),
                 new HudMetric("TTS", "Configured", "#FFB300")
             ]);
         }
@@ -778,7 +816,7 @@ public class MainAssistantViewModel(
         try
         {
             var models = await _modelRegistry.GetModelsAsync(ProviderCapability.Llm, ct);
-            var selectedModel = FirstNonEmpty(_settingsService.SelectedModelName, _settingsService.LlamaModelId);
+            var selectedModel = _settingsService.GetActiveProvider("LLM")?.ModelId ?? "";
             var candidate = models.FirstOrDefault(model => model.IsAvailable && (string.IsNullOrWhiteSpace(selectedModel)
                 || string.Equals(model.Id, selectedModel, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(model.DisplayName, selectedModel, StringComparison.OrdinalIgnoreCase)))
@@ -932,9 +970,7 @@ public class MainAssistantViewModel(
         {
             target.Clear();
             foreach (var value in values)
-            {
                 target.Add(value);
-            }
         });
     }
 
@@ -944,165 +980,7 @@ public class MainAssistantViewModel(
         {
             ServiceHealthItems.Clear();
             foreach (var value in values)
-            {
                 ServiceHealthItems.Add(value);
-            }
         });
     }
-
-    private static string DescribeEndpoint(string endpoint, string fallback) =>
-        string.IsNullOrWhiteSpace(endpoint) ? fallback : ShortenEndpoint(endpoint);
-
-    private static string ShortenEndpoint(string endpoint)
-    {
-        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
-            return string.IsNullOrWhiteSpace(endpoint) ? "Not set" : endpoint;
-
-        return string.IsNullOrWhiteSpace(uri.PathAndQuery) || uri.PathAndQuery == "/"
-            ? uri.Authority
-            : $"{uri.Authority}{uri.PathAndQuery}";
-    }
-
-    private static string ShortenPath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return "Not set";
-
-        var normalized = path.Trim().Replace('\\', '/');
-        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length <= 2 ? normalized : $".../{parts[^2]}/{parts[^1]}";
-    }
-
-    private static string TrimForMetric(string value)
-    {
-        var trimmed = string.IsNullOrWhiteSpace(value) ? "No detail returned" : value.Trim().ReplaceLineEndings(" ");
-        return trimmed.Length <= 80 ? trimmed : $"{trimmed[..77]}...";
-    }
-
-    private static string FirstNonEmpty(params string?[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
-
-    private static bool ModelMatchesSelection(ModelProfile model, string selection) =>
-        string.Equals(model.Id, selection, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(model.DisplayName, selection, StringComparison.OrdinalIgnoreCase)
-        || string.Equals($"{model.Provider}:{model.Id}", selection, StringComparison.OrdinalIgnoreCase);
-
-    private static async ValueTask<bool> EnsureMicrophonePermissionAsync()
-    {
-        try
-        {
-            var status = await Microsoft.Maui.ApplicationModel.Permissions.CheckStatusAsync<Microsoft.Maui.ApplicationModel.Permissions.Microphone>();
-            if (status == Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
-                return true;
-
-            status = await Microsoft.Maui.ApplicationModel.Permissions.RequestAsync<Microsoft.Maui.ApplicationModel.Permissions.Microphone>();
-            if (status == Microsoft.Maui.ApplicationModel.PermissionStatus.Granted)
-                return true;
-
-            bool openSettings = await Application.Current!.MainPage!.DisplayAlert(
-                "Microphone Permission Required",
-                "QuantumZ needs microphone access to listen for voice commands and perform speech-to-text. Would you like to enable it in your device settings?",
-                "Open Settings", "Cancel");
-
-            if (openSettings)
-            {
-                AppInfo.Current.ShowSettingsUI();
-            }
-            return false;
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Permission check failed: {ex}");
-            return false;
-        }
-    }
-
-    private void StartMicrophoneService()
-    {
-        try
-        {
-#if ANDROID
-            _debugLogger.Log("MainAssistant", "Starting MicrophoneForegroundService from UI.");
-            var context = global::Android.App.Application.Context;
-            var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
-            if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.O)
-            {
-                context.StartForegroundService(intent);
-            }
-            else
-            {
-                context.StartService(intent);
-            }
-#endif
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Failed to start MicrophoneForegroundService: {ex}");
-            _debugLogger.Log("MainAssistant", $"Failed to start microphone service: {ex.Message}", LogLevel.Error);
-        }
-    }
-
-    private void StopMicrophoneService()
-    {
-#if ANDROID
-        _debugLogger.Log("MainAssistant", "Stopping MicrophoneForegroundService from UI.");
-        var context = global::Android.App.Application.Context;
-        var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
-        context.StopService(intent);
-#endif
-    }
-
-    private async Task TestPipelineAsync()
-    {
-        try
-        {
-#if ANDROID
-            var context = global::Android.App.Application.Context;
-            var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
-            intent.SetAction("com.quantumz.assistant.TEST_UTTERANCE");
-            intent.PutExtra("utterance", "hey quantum what is the current time");
-            if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.O)
-            {
-                context.StartForegroundService(intent);
-            }
-            else
-            {
-                context.StartService(intent);
-            }
-            AiStatusText = "Test pipeline started...";
-#endif
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Test pipeline failed: {ex}");
-            AiStatusText = "Test failed";
-        }
-    }
-}
-
-public sealed record HudMetric(string Label, string Value, string AccentColor);
-
-public enum ServiceHealthState
-{
-    Unknown,
-    Checking,
-    Unconfigured,
-    Partial,
-    Ready,
-    Failed
-}
-
-public sealed record ServiceHealthMetric(string Label, string Value, string AccentColor, ServiceHealthState State)
-{
-    public bool IsPulsing => State is ServiceHealthState.Checking or ServiceHealthState.Partial;
-
-    public static ServiceHealthMetric Checking(string label, string value) => new(label, value, "#FFB300", ServiceHealthState.Checking);
-
-    public static ServiceHealthMetric Unconfigured(string label, string value) => new(label, value, "#9A9A9A", ServiceHealthState.Unconfigured);
-
-    public static ServiceHealthMetric Partial(string label, string value) => new(label, value, "#FFB300", ServiceHealthState.Partial);
-
-    public static ServiceHealthMetric Ready(string label, string value) => new(label, value, "#00FF88", ServiceHealthState.Ready);
-
-    public static ServiceHealthMetric Failed(string label, string value) => new(label, value, "#FF003C", ServiceHealthState.Failed);
 }

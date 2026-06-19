@@ -29,7 +29,7 @@ public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService sett
         Capability: ProviderCapability.Stt,
         Location: ProviderLocation.Remote);
 
-    public bool IsReady => !string.IsNullOrWhiteSpace(settings.SttUrl);
+    public bool IsReady => !string.IsNullOrWhiteSpace(settings.GetActiveProvider("STT")?.Url);
 
     public async ValueTask<bool> IsAvailableAsync(CancellationToken ct = default)
     {
@@ -40,7 +40,7 @@ public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService sett
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(2));
-            using var response = await httpClient.GetAsync(BuildEndpoint(settings.SttUrl, "models"), timeoutCts.Token);
+            using var response = await httpClient.GetAsync(BuildEndpoint(settings.GetActiveProvider("STT")?.Url ?? "", "models"), timeoutCts.Token);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
@@ -64,17 +64,17 @@ public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService sett
         if (!IsReady)
             throw new InvalidOperationException("STT server URL is not configured for remote STT.");
 
-        var endpoint = BuildEndpoint(settings.SttUrl, "audio/transcriptions");
+        var endpoint = BuildEndpoint(settings.GetActiveProvider("STT")?.Url ?? "", "audio/transcriptions");
         var wavBytes = PcmToWavConverter.Convert(SampleRate, Channels, pcm16Audio);
 
         using var content = new MultipartFormDataContent();
-        content.Add(new StringContent(FirstNonEmpty(settings.SttModelId, "whisper-base")!), "model");
+        content.Add(new StringContent(FirstNonEmpty(settings.GetActiveProvider("STT")?.ModelId ?? "", "whisper-base")!), "model");
         content.Add(new StreamContent(new MemoryStream(wavBytes))
         {
             Headers = { ContentType = new MediaTypeHeaderValue("audio/wav") }
         }, "file", "audio.wav");
 
-        debugLogger.LogEvent(new DebugEvent(DateTime.Now, "STT", LogLevel.Info, "Sending audio for transcription...", new { Bytes = pcm16Audio.Length, settings.SttModelId, Endpoint = endpoint }));
+        debugLogger.LogEvent(new DebugEvent(DateTime.Now, "STT", LogLevel.Info, "Sending audio for transcription...", new { Bytes = pcm16Audio.Length, ModelId = settings.GetActiveProvider("STT")?.ModelId, Endpoint = endpoint }));
         using var response = await httpClient.PostAsync(endpoint, content, ct);
         response.EnsureSuccessStatusCode();
 

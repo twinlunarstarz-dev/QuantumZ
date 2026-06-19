@@ -18,13 +18,13 @@ public sealed class LocalAiTtsProvider(IModelRegistry modelRegistry, ISettingsSe
 
     public async ValueTask<bool> IsAvailableAsync(CancellationToken ct = default)
     {
-        var selected = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Tts, settings.TtsModelId, ct);
+        var selected = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Tts, settings.GetActiveProvider("TTS")?.ModelId ?? "", ct);
         return selected is { Location: ProviderLocation.Local };
     }
 
     public async ValueTask<byte[]> SynthesizeAsync(string text, CancellationToken ct = default)
     {
-        var selected = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Tts, settings.TtsModelId, ct)
+        var selected = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Tts, settings.GetActiveProvider("TTS")?.ModelId ?? "", ct)
             ?? throw new InvalidOperationException("No local TTS model is available.");
 
         if (selected.Location != ProviderLocation.Local)

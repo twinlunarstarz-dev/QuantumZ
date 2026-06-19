@@ -1,3 +1,4 @@
+using QuantumZ.Core.Models;
 using QuantumZ.UI.ViewModels;
 
 namespace QuantumZ.UI.Pages;
@@ -46,6 +47,10 @@ public partial class MainAssistantPage : ContentPage
                     && !vm.IsConfigViewOpen)
             {
                 _ = TransitionToPanelAsync(HudPanelMode.None);
+            }
+            else if (e.PropertyName == nameof(MainAssistantViewModel.OrbPulseSpeed))
+            {
+                StartPulseAnimation();
             }
         };
     }
@@ -114,11 +119,30 @@ public partial class MainAssistantPage : ContentPage
         {
             while (!token.IsCancellationRequested)
             {
-                await AssistantRing.ScaleTo(1.035, 900, Easing.CubicInOut);
-                await AssistantOrb.ScaleTo(1.08, 900, Easing.CubicInOut);
+                var vm = BindingContext as MainAssistantViewModel;
+                uint speed = vm?.OrbPulseSpeed ?? 900;
+
+                if (speed == 0 || vm?.CurrentState == PipelineState.Idle)
+                {
+                    // Idle — gentle ambient ring glow only; snap orb back to neutral scale.
+                    await AssistantOrb.ScaleTo(1.0, 300, Easing.SinOut);
+                    await AssistantRing.ScaleTo(1.02, 1500, Easing.SinInOut);
+                    if (token.IsCancellationRequested) return;
+                    await AssistantRing.ScaleTo(1.0, 1500, Easing.SinInOut);
+                    continue;
+                }
+
+                double orbBase = vm?.OrbScale ?? 1.0;
+                uint half = Math.Max(speed / 2, 80u);
+                uint ringHalf = Math.Min(half, 900u);
+
+                await Task.WhenAll(
+                    AssistantOrb.ScaleTo(orbBase * 1.06, half, Easing.SinInOut),
+                    AssistantRing.ScaleTo(1.035, ringHalf, Easing.CubicInOut));
                 if (token.IsCancellationRequested) return;
-                await AssistantRing.ScaleTo(1.0, 900, Easing.CubicInOut);
-                await AssistantOrb.ScaleTo(1.0, 900, Easing.CubicInOut);
+                await Task.WhenAll(
+                    AssistantOrb.ScaleTo(orbBase, half, Easing.SinInOut),
+                    AssistantRing.ScaleTo(1.0, ringHalf, Easing.CubicInOut));
             }
         }
         catch (OperationCanceledException) { }
@@ -161,11 +185,11 @@ public partial class MainAssistantPage : ContentPage
     }
     private async Task TransitionToPanelAsync(HudPanelMode mode)
     {
-        if (!await _panelTransitionSemaphore.WaitAsync(0).ConfigureAwait(true))
-            return;
-
         try
         {
+            if (!await _panelTransitionSemaphore.WaitAsync(0).ConfigureAwait(true))
+                return;
+
             if (_currentPanelMode == mode)
                 return;
 
@@ -225,6 +249,10 @@ public partial class MainAssistantPage : ContentPage
                     FocusContainer.TranslateTo(0, 0, 360, Easing.CubicOut)
                 );
             }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"UI Transition failed for mode {mode}: {ex}");
         }
         finally
         {

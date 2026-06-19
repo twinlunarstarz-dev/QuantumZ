@@ -116,7 +116,7 @@ public sealed class WhisperLocalSttProvider(IModelRegistry modelRegistry, ISetti
         if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
             return configuredPath;
 
-        var selected = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Stt, settings.SttModelId, ct);
+        var selected = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Stt, settings.GetActiveProvider("STT")?.ModelId ?? "", ct);
         if (selected is { Location: ProviderLocation.Local, LocalPath: not null } && File.Exists(selected.LocalPath))
             return selected.LocalPath;
 

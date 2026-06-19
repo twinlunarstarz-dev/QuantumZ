@@ -4,10 +4,10 @@ namespace QuantumZ.UI.Pages;
 
 public partial class SettingsPage : ContentPage
 {
-    public SettingsPage(SettingsViewModel viewModel)
+    public SettingsPage(SettingsViewModel vm)
     {
         InitializeComponent();
-        BindingContext = viewModel;
-        viewModel.Load();
+        BindingContext = vm;
+        vm.LoadSettings();
     }
 }

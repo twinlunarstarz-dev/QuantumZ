@@ -140,7 +140,7 @@ namespace QuantumZ.Infrastructure.Services
 
         private string? ResolveModelPath()
         {
-            var selected = FirstNonEmpty(settings.SelectedModelName, settings.LlamaModelId);
+            var selected = settings.GetActiveProvider("LLM")?.ModelId ?? "";
             if (!string.IsNullOrWhiteSpace(selected) && File.Exists(selected))
                 return selected;
 

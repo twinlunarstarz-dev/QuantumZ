@@ -42,30 +42,32 @@ public sealed class SettingsService : ISettingsService
     private const string GlobalSettingsFile = "global_settings.json";
     private const string WakeWordsFile = "wake_words.json";
     private const string SummarizationTriggersFile = "summarization_triggers.json";
+    private const string PipelineSettingsFile = "pipeline_settings.json";
+    private const string VoiceAssistantSettingsFile = "voice_assistant_settings.json";
 
     public event Action<ISettingsService>? SettingsChanged;
 
     public ServiceProviderSettings LlmSettings
     {
-        get => LoadComplexFromJson<ServiceProviderSettings>(LlmSettingsFile) ?? MigrateLegacySetting(LlmUrlKeyLegacy, "LLM-Primary");
+        get => NormalizeServiceProviderSettings("LLM", LoadComplexFromJson<ServiceProviderSettings>(LlmSettingsFile) ?? MigrateLegacySetting(LlmUrlKeyLegacy, "LLM-Primary"));
         set { SaveComplexToJson(LlmSettingsFile, value); NotifySettingsChanged(); }
     }
 
     public ServiceProviderSettings VadSettings
     {
-        get => LoadComplexFromJson<ServiceProviderSettings>(VadSettingsFile) ?? MigrateLegacySetting(VadUrlKeyLegacy, "VAD-Primary");
+        get => NormalizeServiceProviderSettings("VAD", LoadComplexFromJson<ServiceProviderSettings>(VadSettingsFile) ?? MigrateLegacySetting(VadUrlKeyLegacy, "VAD-Primary"));
         set { SaveComplexToJson(VadSettingsFile, value); NotifySettingsChanged(); }
     }
 
     public ServiceProviderSettings SttSettings
     {
-        get => LoadComplexFromJson<ServiceProviderSettings>(SttSettingsFile) ?? MigrateLegacySetting(SttUrlKeyLegacy, "STT-Primary");
+        get => NormalizeServiceProviderSettings("STT", LoadComplexFromJson<ServiceProviderSettings>(SttSettingsFile) ?? MigrateLegacySetting(SttUrlKeyLegacy, "STT-Primary"));
         set { SaveComplexToJson(SttSettingsFile, value); NotifySettingsChanged(); }
     }
 
     public ServiceProviderSettings TtsSettings
     {
-        get => LoadComplexFromJson<ServiceProviderSettings>(TtsSettingsFile) ?? MigrateLegacySetting(TtsUrlKeyLegacy, "TTS-Primary");
+        get => NormalizeServiceProviderSettings("TTS", LoadComplexFromJson<ServiceProviderSettings>(TtsSettingsFile) ?? MigrateLegacySetting(TtsUrlKeyLegacy, "TTS-Primary"));
         set { SaveComplexToJson(TtsSettingsFile, value); NotifySettingsChanged(); }
     }
 
@@ -83,6 +85,18 @@ public sealed class SettingsService : ISettingsService
     {
         get => LoadComplexFromJson<GlobalAssistantSettings>(GlobalSettingsFile) ?? new GlobalAssistantSettings();
         set { SaveComplexToJson(GlobalSettingsFile, value); NotifySettingsChanged(); }
+    }
+
+    public PipelineSettings PipelineSettings
+    {
+        get => LoadComplexFromJson<PipelineSettings>(PipelineSettingsFile) ?? new PipelineSettings();
+        set { SaveComplexToJson(PipelineSettingsFile, value); NotifySettingsChanged(); }
+    }
+
+    public VoiceAssistantSettings VoiceAssistantSettings
+    {
+        get => LoadComplexFromJson<VoiceAssistantSettings>(VoiceAssistantSettingsFile) ?? new VoiceAssistantSettings();
+        set { SaveComplexToJson(VoiceAssistantSettingsFile, value); NotifySettingsChanged(); }
     }
 
     public List<string> WakeWords
@@ -133,6 +147,12 @@ public sealed class SettingsService : ISettingsService
         set { GlobalSettings = GlobalSettings with { UseOnDeviceStt = value }; NotifySettingsChanged(); }
     }
 
+    public bool UseLocalTts
+    {
+        get => GlobalSettings.UseLocalTts;
+        set { GlobalSettings = GlobalSettings with { UseLocalTts = value }; NotifySettingsChanged(); }
+    }
+
     public string WhisperModelPath
     {
         get => Preferences.Default.Get(WhisperModelPathKey, string.Empty);
@@ -153,34 +173,14 @@ public sealed class SettingsService : ISettingsService
 
     private void NotifySettingsChanged() => SettingsChanged?.Invoke(this);
 
-    public string LlmUrl => LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName)?.Url ?? "";
-    public string VadUrl => VadSettings.Providers.FirstOrDefault(p => p.Name == VadSettings.ActiveProviderName)?.Url ?? "";
-    public string SttUrl => SttSettings.Providers.FirstOrDefault(p => p.Name == SttSettings.ActiveProviderName)?.Url ?? "";
-    public string TtsUrl => TtsSettings.Providers.FirstOrDefault(p => p.Name == TtsSettings.ActiveProviderName)?.Url ?? "";
-
-    public string LlamaModelId
+    public ProviderConfig? GetActiveProvider(string service) => service.ToUpper() switch
     {
-        get => LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName)?.ModelId ?? "";
-        set { var p = LlmSettings.Providers.ToList(); var idx = p.FindIndex(x => x.Name == LlmSettings.ActiveProviderName); if (idx >= 0) p[idx] = p[idx] with { ModelId = value }; LlmSettings = LlmSettings with { Providers = p }; NotifySettingsChanged(); }
-    }
-
-    public string SelectedModelName
-    {
-        get => LlamaModelId;
-        set { LlamaModelId = value; }
-    }
-
-    public string SttModelId
-    {
-        get => SttSettings.Providers.FirstOrDefault(p => p.Name == SttSettings.ActiveProviderName)?.ModelId ?? "";
-        set { var p = SttSettings.Providers.ToList(); var idx = p.FindIndex(x => x.Name == SttSettings.ActiveProviderName); if (idx >= 0) p[idx] = p[idx] with { ModelId = value }; SttSettings = SttSettings with { Providers = p }; NotifySettingsChanged(); }
-    }
-
-    public string TtsModelId
-    {
-        get => TtsSettings.Providers.FirstOrDefault(p => p.Name == TtsSettings.ActiveProviderName)?.ModelId ?? "";
-        set { var p = TtsSettings.Providers.ToList(); var idx = p.FindIndex(x => x.Name == TtsSettings.ActiveProviderName); if (idx >= 0) p[idx] = p[idx] with { ModelId = value }; TtsSettings = TtsSettings with { Providers = p }; NotifySettingsChanged(); }
-    }
+        "LLM" => LlmSettings.Providers.FirstOrDefault(p => p.Name == LlmSettings.ActiveProviderName),
+        "VAD" => VadSettings.Providers.FirstOrDefault(p => p.Name == VadSettings.ActiveProviderName),
+        "STT" => SttSettings.Providers.FirstOrDefault(p => p.Name == SttSettings.ActiveProviderName),
+        "TTS" => TtsSettings.Providers.FirstOrDefault(p => p.Name == TtsSettings.ActiveProviderName),
+        _ => null
+    };
 
     private List<string>? LoadListFromJson(string fileName)
     {
@@ -207,6 +207,48 @@ public sealed class SettingsService : ISettingsService
     private void SaveComplexToJson<T>(string fileName, T data)
     {
         var path = Path.Combine(FileSystem.AppDataDirectory, fileName);
-        File.WriteAllText(path, JsonSerializer.Serialize(data));
+        var tempPath = path + ".tmp";
+
+        try
+        {
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(data));
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(tempPath, path);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Atomic save failed for {fileName}: {ex}");
+            throw;
+        }
+    }
+
+    private ServiceProviderSettings NormalizeServiceProviderSettings(string serviceName, ServiceProviderSettings? settings)
+    {
+        if (settings == null) return MigrateLegacySetting(serviceName switch
+        {
+            "LLM" => LlmUrlKeyLegacy,
+            "VAD" => VadUrlKeyLegacy,
+            "STT" => SttUrlKeyLegacy,
+            "TTS" => TtsUrlKeyLegacy,
+            _ => throw new ArgumentException("Invalid service name")
+        }, $"{serviceName}-Primary");
+
+        var providers = settings.Providers ?? [];
+        var activeProviderName = settings.ActiveProviderName;
+
+        if (providers.Count == 0)
+        {
+            // Recovery seeding: seed default provider if list is empty
+            var defaultName = $"{serviceName}-Primary";
+            providers = [new ProviderConfig(defaultName, ServerUrlDefault)];
+            activeProviderName = defaultName;
+        }
+        else if (string.IsNullOrWhiteSpace(activeProviderName) || !providers.Any(p => p.Name == activeProviderName))
+        {
+            // Ensure ActiveProviderName points to a valid provider in the list
+            activeProviderName = providers[0].Name;
+        }
+
+        return settings with { Providers = providers, ActiveProviderName = activeProviderName };
     }
 }

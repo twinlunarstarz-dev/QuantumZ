@@ -210,12 +210,13 @@ public sealed class ModelRegistry(
     {
         var endpoints = new List<(string BaseUrl, ProviderLocation Location, string Provider)>
         {
-            (settings.LlmUrl, ProviderLocation.Remote, "openai-compatible"),
+            (settings.GetActiveProvider("LLM")?.Url ?? "", ProviderLocation.Remote, "openai-compatible"),
             (LocalLlamaBaseUrl, ProviderLocation.Local, "llama.cpp")
         };
 
-        if (!string.IsNullOrWhiteSpace(settings.TtsUrl))
-            endpoints.Add((settings.TtsUrl, ProviderLocation.Remote, "openai-compatible-tts"));
+        var ttsUrl = settings.GetActiveProvider("TTS")?.Url;
+        if (!string.IsNullOrWhiteSpace(ttsUrl))
+            endpoints.Add((ttsUrl, ProviderLocation.Remote, "openai-compatible-tts"));
 
         return endpoints
             .Where(endpoint => !string.IsNullOrWhiteSpace(endpoint.BaseUrl))
@@ -227,9 +228,9 @@ public sealed class ModelRegistry(
 
     private string? GetConfiguredModelId(ProviderCapability capability) => capability switch
     {
-        ProviderCapability.Llm => FirstNonEmpty(settings.SelectedModelName, settings.LlamaModelId),
-        ProviderCapability.Stt => settings.SttModelId,
-        ProviderCapability.Tts => settings.TtsModelId,
+        ProviderCapability.Llm => settings.GetActiveProvider("LLM")?.ModelId,
+        ProviderCapability.Stt => settings.GetActiveProvider("STT")?.ModelId,
+        ProviderCapability.Tts => settings.GetActiveProvider("TTS")?.ModelId,
         _ => null
     };
 
@@ -308,13 +309,13 @@ public sealed class ModelRegistry(
 
     private string GetSettingsSignature() =>
         string.Join('|',
-            settings.LlmUrl?.Trim() ?? string.Empty,
-            settings.SttUrl?.Trim() ?? string.Empty,
-            settings.TtsUrl?.Trim() ?? string.Empty,
-            settings.SelectedModelName?.Trim() ?? string.Empty,
-            settings.LlamaModelId?.Trim() ?? string.Empty,
-            settings.SttModelId?.Trim() ?? string.Empty,
-            settings.TtsModelId?.Trim() ?? string.Empty,
+            settings.GetActiveProvider("LLM")?.Url?.Trim() ?? string.Empty,
+            settings.GetActiveProvider("STT")?.Url?.Trim() ?? string.Empty,
+            settings.GetActiveProvider("TTS")?.Url?.Trim() ?? string.Empty,
+            settings.GetActiveProvider("LLM")?.ModelId?.Trim() ?? string.Empty,
+            "", // LlamaModelId legacy placeholder
+            settings.GetActiveProvider("STT")?.ModelId?.Trim() ?? string.Empty,
+            settings.GetActiveProvider("TTS")?.ModelId?.Trim() ?? string.Empty,
             settings.WhisperModelPath?.Trim() ?? string.Empty,
             settings.UseOnDeviceStt.ToString());
 
