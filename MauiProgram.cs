@@ -21,11 +21,13 @@ public static class MauiProgram
         builder.Services.AddInfrastructure();
 
         builder.Services.AddSingleton<App>();
+        builder.Services.AddTransient<SetupPage>();
         builder.Services.AddTransient<MainAssistantPage>();
         builder.Services.AddTransient<SettingsPage>();
         builder.Services.AddTransient<MemoryPage>();
         builder.Services.AddTransient<DebugOverlayPage>();
 
+        builder.Services.AddSingleton<SetupViewModel>();
         builder.Services.AddSingleton<MainAssistantViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
         builder.Services.AddSingleton<MemoryViewModel>();

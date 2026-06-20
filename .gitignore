@@ -3,6 +3,7 @@
 # Build results
 [Bb]in/
 [Oo]bj/
+[Bb]uild/
 [Tt]emp
 
 # Visual Studio files
@@ -34,6 +35,12 @@ Desktop.ini
 Tls*
 */platforms/android/bin/
 */platforms/ios/bin/
+
+# Native wrapper build outputs and vendored upstream sources
+Native/build/
+Native/third_party/llama.cpp/
+Native/third_party/whisper.cpp/
+Native/third_party/prebuilt/
 
 # Environment and Secrets (Crucial)
 .env

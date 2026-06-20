@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="QuantumZ.UI.Pages.SetupPage"
+             x:Name="Root"
+             NavigationPage.HasNavigationBar="False"
+             Title="QuantumZ Setup">
+
+    <Grid BackgroundColor="{StaticResource CrimsonBackground}">
+        <BoxView BackgroundColor="{StaticResource CrimsonBackground}" />
+
+        <BoxView Opacity="0.28"
+                 VerticalOptions="Start"
+                 HeightRequest="360">
+            <BoxView.Background>
+                <RadialGradientBrush Center="0.5,0.0" Radius="0.9">
+                    <GradientStop Color="{StaticResource CrimsonNeonDim}" Offset="0.0" />
+                    <GradientStop Color="{StaticResource CrimsonBackground}" Offset="1.0" />
+                </RadialGradientBrush>
+            </BoxView.Background>
+        </BoxView>
+
+        <Grid InputTransparent="True"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              RowSpacing="44"
+              Opacity="0.22">
+            <BoxView Grid.Row="0" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="1" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="2" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="3" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="4" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="5" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="6" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+        </Grid>
+
+        <ScrollView>
+            <VerticalStackLayout Padding="20,36,20,28"
+                                 Spacing="18">
+                <Border Style="{StaticResource HudPanel}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <VerticalStackLayout Grid.Column="0" Spacing="4">
+                            <Label Text="QUANTUMZ SETUP"
+                                   TextColor="{StaticResource CrimsonTextPrimary}"
+                                   FontSize="26"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="1.4" />
+                            <Label Text="REMOTE + ON-DEVICE READINESS // QUANTUMZ"
+                                   Style="{StaticResource CyberLabelMuted}"
+                                   FontSize="10"
+                                   CharacterSpacing="1.2" />
+                            <Label Text="Choose how the assistant should run. Remote mode uses your OpenAI-compatible server; on-device setup remains locked until local assets and native runtimes are verified."
+                                   Style="{StaticResource CyberLabelMuted}"
+                                   LineBreakMode="WordWrap" />
+                        </VerticalStackLayout>
+
+                        <Border Grid.Column="1"
+                                Style="{StaticResource StatusPill}"
+                                VerticalOptions="Start">
+                            <Label Text="SETUP"
+                                   TextColor="{StaticResource CrimsonSuccess}"
+                                   FontSize="10"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="1.2" />
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource NeonFrame}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="REMOTE SERVER"
+                               Style="{StaticResource CyberLabelSection}"
+                               Margin="0" />
+                        <Label Text="Configure a local or LAN OpenAI-compatible endpoint. This saves routing only and does not download any models."
+                               Style="{StaticResource CyberLabelMuted}"
+                               LineBreakMode="WordWrap" />
+
+                        <Label Text="SERVER URL"
+                               Style="{StaticResource HudMetricLabel}" />
+                        <Entry Text="{Binding RemoteBaseUrl}"
+                               Placeholder="http://localhost:8025"
+                               Keyboard="Url"
+                               Style="{StaticResource CyberEntry}" />
+
+                        <Label Text="LLM MODEL ID"
+                               Style="{StaticResource HudMetricLabel}" />
+                        <Entry Text="{Binding RemoteModelId}"
+                               Placeholder="Provider default"
+                               Style="{StaticResource CyberEntry}" />
+
+                        <Label Text="API KEY"
+                               Style="{StaticResource HudMetricLabel}" />
+                        <Entry Text="{Binding RemoteApiKey}"
+                               Placeholder="Optional"
+                               IsPassword="True"
+                               Style="{StaticResource CyberEntry}" />
+
+                        <Button Text="USE REMOTE MODE"
+                                Command="{Binding UseRemoteCommand}"
+                                Style="{StaticResource CyberButton}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource HudPanel}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="ON-DEVICE MODE"
+                               Style="{StaticResource CyberLabelSection}"
+                               Margin="0" />
+                        <Label Text="Truthful local readiness checklist. Android 10+ cannot safely execute downloaded binaries, so executable-backed providers require packaged native runtimes."
+                               Style="{StaticResource CyberLabelMuted}"
+                               LineBreakMode="WordWrap" />
+
+                        <Label Text="HUGGING FACE TOKEN"
+                               Style="{StaticResource HudMetricLabel}" />
+                        <Entry Text="{Binding HuggingFaceToken}"
+                               Placeholder="Optional; used only for one gated install attempt"
+                               IsPassword="True"
+                               Style="{StaticResource CyberEntry}" />
+
+                        <CollectionView ItemsSource="{Binding LocalChecklist}"
+                                        SelectionMode="None">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource InsetGlassPanel}"
+                                            Margin="0,4">
+                                        <VerticalStackLayout Spacing="8">
+                                            <Label Text="{Binding Label}"
+                                                   Style="{StaticResource CyberLabelBody}"
+                                                   FontAttributes="Bold"
+                                                   LineBreakMode="WordWrap" />
+                                            <Label Text="{Binding StatusText}"
+                                                   Style="{StaticResource CyberLabelMuted}"
+                                                   LineBreakMode="WordWrap" />
+                                             <ProgressBar Progress="{Binding Progress}"
+                                                          ProgressColor="{StaticResource CrimsonPrimaryAccent}"
+                                                          BackgroundColor="{StaticResource CrimsonSurfaceElevated}" />
+                                            <Button Text="INSTALL / SELECT"
+                                                    Command="{Binding BindingContext.InstallLocalItemCommand, Source={x:Reference Root}}"
+                                                    CommandParameter="{Binding Id}"
+                                                    Style="{StaticResource CompactGhostButton}" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+
+                        <Button Text="REFRESH LOCAL CHECKLIST"
+                                Command="{Binding RefreshLocalChecklistCommand}"
+                                Style="{StaticResource CompactGhostButton}" />
+                        <Button Text="CHECK ON-DEVICE READINESS"
+                                 Command="{Binding UseOnDeviceCommand}"
+                                 Style="{StaticResource GhostButton}" />
+                        <Button Text="OPEN FULL SETTINGS"
+                                Command="{Binding OpenSettingsCommand}"
+                                Style="{StaticResource CompactGhostButton}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border Style="{StaticResource StatusPill}">
+                    <Label Text="{Binding StatusMessage}"
+                           TextColor="{StaticResource CrimsonWarning}"
+                           FontSize="12"
+                           FontAttributes="Bold"
+                           CharacterSpacing="1"
+                           LineBreakMode="WordWrap" />
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentPage>

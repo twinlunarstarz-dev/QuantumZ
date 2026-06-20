@@ -156,20 +156,43 @@
 
     <!-- Entry Style for Settings -->
     <Style x:Key="CyberEntry" TargetType="Entry">
-        <Setter Property="BackgroundColor" Value="{StaticResource CrimsonSurfaceElevated}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource CrimsonGlassInset}" />
         <Setter Property="TextColor" Value="{StaticResource CrimsonTextPrimary}" />
         <Setter Property="PlaceholderColor" Value="{StaticResource CrimsonTextSecondary}" />
         <Setter Property="HeightRequest" Value="50" />
         <Setter Property="HorizontalOptions" Value="Fill" />
     </Style>
 
+    <Style x:Key="CyberEditor" TargetType="Editor">
+        <Setter Property="BackgroundColor" Value="{StaticResource CrimsonGlassInset}" />
+        <Setter Property="TextColor" Value="{StaticResource CrimsonTextPrimary}" />
+        <Setter Property="PlaceholderColor" Value="{StaticResource CrimsonTextSecondary}" />
+        <Setter Property="HorizontalOptions" Value="Fill" />
+    </Style>
+
     <!-- Picker Style for Settings -->
     <Style x:Key="CyberPicker" TargetType="Picker">
-        <Setter Property="BackgroundColor" Value="{StaticResource CrimsonSurfaceElevated}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource CrimsonGlassInset}" />
         <Setter Property="TextColor" Value="{StaticResource CrimsonTextPrimary}" />
         <Setter Property="TitleColor" Value="{StaticResource CrimsonTextSecondary}" />
         <Setter Property="HeightRequest" Value="50" />
         <Setter Property="HorizontalOptions" Value="Fill" />
+    </Style>
+
+    <Style x:Key="CyberSlider" TargetType="Slider">
+        <Setter Property="MinimumTrackColor" Value="{StaticResource CrimsonPrimaryAccent}" />
+        <Setter Property="MaximumTrackColor" Value="{StaticResource CrimsonSurfaceElevated}" />
+        <Setter Property="ThumbColor" Value="{StaticResource CrimsonPrimaryAccent}" />
+    </Style>
+
+    <Style x:Key="StageModeButton" TargetType="Button">
+        <Setter Property="BorderColor" Value="{StaticResource CrimsonGlassBorder}" />
+        <Setter Property="BorderWidth" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="HeightRequest" Value="38" />
+        <Setter Property="Padding" Value="0" />
     </Style>
 
     <!-- Switch Style -->

@@ -50,7 +50,6 @@ public partial class MainAssistantViewModel(
     private readonly IPipelineStateService _pipelineStateService = pipelineStateService ?? throw new ArgumentNullException(nameof(pipelineStateService));
     private DateTime _lastServiceHealthRefreshUtc = DateTime.MinValue;
     private bool _serviceHealthRefreshInFlight;
-    private bool _startupMonitorAttempted;
 
     private string _assistantImageSource = string.Empty;
     public string AssistantImageSource
@@ -502,6 +501,9 @@ public partial class MainAssistantViewModel(
 
     private async Task StartListeningAsync()
     {
+        if (!await EnsureSetupCompletedAsync())
+            return;
+
         if (!await EnsureMicrophonePermissionAsync())
             return;
 
@@ -669,11 +671,6 @@ public partial class MainAssistantViewModel(
         AssistantImageSource = string.Empty;
 
         await RefreshHudTelemetryAsync(force: true);
-        if (!_startupMonitorAttempted)
-        {
-            _startupMonitorAttempted = true;
-            await SetListeningAsync(true);
-        }
     }
 
     private async Task RefreshHudTelemetryAsync(bool force = false)
@@ -693,7 +690,7 @@ public partial class MainAssistantViewModel(
             ModelEndpointText = FirstNonEmpty(selectedProfile?.Endpoint, llmModel?.Endpoint, _settingsService.GetActiveProvider("LLM")?.Url ?? "", localServerOnline ? ModelRegistry.LocalLlamaBaseUrl : "No reachable endpoint");
             ServerHealthText = remoteCount > 0 ? "REMOTE SERVER ONLINE" : localServerOnline ? "LOCAL LLAMA SERVER ONLINE" : "LLM SERVER OFFLINE";
             GpuStatusText = remoteCount > 0 ? "GPU SERVER ROUTE READY" : localServerOnline ? "LOCAL CPU ROUTE READY" : localBinaryAvailable ? "LOCAL BINARY READY / SERVER STOPPED" : "LOCAL BINARY MISSING";
-            ConfigVoiceRouteText = $"Wake word: {FirstNonEmpty(_settingsService.WakeWords.FirstOrDefault(), "hey quantum")} • Audio: {_settingsService.AudioRouting} • STT: {(_settingsService.UseOnDeviceStt ? "On-device Whisper" : ShortenEndpoint(_settingsService.GetActiveProvider("STT")?.Url ?? ""))}";
+            ConfigVoiceRouteText = $"Trigger phrase: {FirstNonEmpty(_settingsService.VoiceAssistantSettings.TriggerPhrase, "hey quantum")} • Audio: {_settingsService.AudioRouting} • STT: {(_settingsService.UseOnDeviceStt ? "On-device Whisper" : ShortenEndpoint(_settingsService.GetActiveProvider("STT")?.Url ?? ""))}";
 
             ReplaceMetrics(ModelStatusItems,
             [

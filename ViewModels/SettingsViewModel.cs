@@ -39,68 +39,14 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
     private double _postSilenceSeconds = 1.2;
     public double PostSilenceSeconds { get => _postSilenceSeconds; set => SetProperty(ref _postSilenceSeconds, value); }
 
-    private double _wakeWordThreshold = 0.85;
-    public double WakeWordThreshold { get => _wakeWordThreshold; set => SetProperty(ref _wakeWordThreshold, value); }
+    private double _triggerGateSensitivity = 0.85;
+    public double TriggerGateSensitivity { get => _triggerGateSensitivity; set => SetProperty(ref _triggerGateSensitivity, value); }
 
     private int _selectedAudioOutput;
     public int SelectedAudioOutput { get => _selectedAudioOutput; set => SetProperty(ref _selectedAudioOutput, value); }
 
     private double _maxToolCallIterations = 6;
     public double MaxToolCallIterations { get => _maxToolCallIterations; set => SetProperty(ref _maxToolCallIterations, value); }
-
-    // ── Wake Word Stage ──────────────────────────────────────────────────────
-
-    private bool _wakeWordEnabled = true;
-    public bool WakeWordEnabled
-    {
-        get => _wakeWordEnabled;
-        set { if (SetProperty(ref _wakeWordEnabled, value)) NotifyWakeWordShow(); }
-    }
-
-    private int _wakeWordMode;
-    public int WakeWordMode
-    {
-        get => _wakeWordMode;
-        set { if (SetProperty(ref _wakeWordMode, value)) { NotifyWakeWordShow(); NotifyWakeWordColors(); } }
-    }
-
-    private string _wakeWordRemoteUrl = string.Empty;
-    public string WakeWordRemoteUrl { get => _wakeWordRemoteUrl; set => SetProperty(ref _wakeWordRemoteUrl, value); }
-    private string _wakeWordRemoteApiKey = string.Empty;
-    public string WakeWordRemoteApiKey { get => _wakeWordRemoteApiKey; set => SetProperty(ref _wakeWordRemoteApiKey, value); }
-    private string _wakeWordRemoteModelId = string.Empty;
-    public string WakeWordRemoteModelId { get => _wakeWordRemoteModelId; set => SetProperty(ref _wakeWordRemoteModelId, value); }
-    private int _wakeWordRemoteTimeout = 30;
-    public int WakeWordRemoteTimeout { get => _wakeWordRemoteTimeout; set => SetProperty(ref _wakeWordRemoteTimeout, value); }
-    private string _wakeWordLocalModelPath = string.Empty;
-    public string WakeWordLocalModelPath { get => _wakeWordLocalModelPath; set => SetProperty(ref _wakeWordLocalModelPath, value); }
-    private int _wakeWordLocalServerPort = 8025;
-    public int WakeWordLocalServerPort { get => _wakeWordLocalServerPort; set => SetProperty(ref _wakeWordLocalServerPort, value); }
-    private string _wakeWordLocalParameters = string.Empty;
-    public string WakeWordLocalParameters { get => _wakeWordLocalParameters; set => SetProperty(ref _wakeWordLocalParameters, value); }
-
-    public bool WakeWordShowRemote => WakeWordEnabled && WakeWordMode == 0;
-    public bool WakeWordShowLocal => WakeWordEnabled && WakeWordMode == 1;
-    public bool WakeWordShowBuiltIn => WakeWordEnabled && WakeWordMode == 2;
-    public Color WakeWordRemoteButtonColor => WakeWordMode == 0 ? AccentColor : InactiveColor;
-    public Color WakeWordLocalButtonColor => WakeWordMode == 1 ? AccentColor : InactiveColor;
-    public Color WakeWordBuiltInButtonColor => WakeWordMode == 2 ? AccentColor : InactiveColor;
-    public Color WakeWordRemoteButtonTextColor => WakeWordMode == 0 ? ActiveTextColor : InactiveTextColor;
-    public Color WakeWordLocalButtonTextColor => WakeWordMode == 1 ? ActiveTextColor : InactiveTextColor;
-    public Color WakeWordBuiltInButtonTextColor => WakeWordMode == 2 ? ActiveTextColor : InactiveTextColor;
-
-    private void NotifyWakeWordShow()
-    {
-        OnPropertyChanged(nameof(WakeWordShowRemote));
-        OnPropertyChanged(nameof(WakeWordShowLocal));
-        OnPropertyChanged(nameof(WakeWordShowBuiltIn));
-    }
-
-    private void NotifyWakeWordColors()
-    {
-        OnPropertyChanged(nameof(WakeWordRemoteButtonColor)); OnPropertyChanged(nameof(WakeWordLocalButtonColor)); OnPropertyChanged(nameof(WakeWordBuiltInButtonColor));
-        OnPropertyChanged(nameof(WakeWordRemoteButtonTextColor)); OnPropertyChanged(nameof(WakeWordLocalButtonTextColor)); OnPropertyChanged(nameof(WakeWordBuiltInButtonTextColor));
-    }
 
     // ── VAD Stage ────────────────────────────────────────────────────────────
 
@@ -355,19 +301,9 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
             SystemPrompt = voice.SystemPrompt;
             PreRollSeconds = voice.PreRollSeconds;
             PostSilenceSeconds = voice.PostSilenceSeconds;
-            WakeWordThreshold = voice.WakeWordThreshold;
+            TriggerGateSensitivity = voice.WakeWordThreshold;
             SelectedAudioOutput = (int)voice.AudioOutput;
             MaxToolCallIterations = voice.MaxToolCallIterations;
-
-            WakeWordEnabled = pipeline.WakeWord.Enabled;
-            WakeWordMode = (int)pipeline.WakeWord.Mode;
-            WakeWordRemoteUrl = pipeline.WakeWord.Remote?.Url ?? string.Empty;
-            WakeWordRemoteApiKey = pipeline.WakeWord.Remote?.ApiKey ?? string.Empty;
-            WakeWordRemoteModelId = pipeline.WakeWord.Remote?.ModelId ?? string.Empty;
-            WakeWordRemoteTimeout = pipeline.WakeWord.Remote?.TimeoutSeconds ?? 30;
-            WakeWordLocalModelPath = pipeline.WakeWord.Local?.ModelPath ?? string.Empty;
-            WakeWordLocalServerPort = pipeline.WakeWord.Local?.ServerPort ?? 8025;
-            WakeWordLocalParameters = pipeline.WakeWord.Local?.AdditionalParameters ?? string.Empty;
 
             VadEnabled = pipeline.Vad.Enabled;
             VadMode = (int)pipeline.Vad.Mode;
@@ -432,14 +368,13 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
                 SystemPrompt = SystemPrompt,
                 PreRollSeconds = (float)PreRollSeconds,
                 PostSilenceSeconds = (float)PostSilenceSeconds,
-                WakeWordThreshold = (float)WakeWordThreshold,
+                WakeWordThreshold = (float)TriggerGateSensitivity,
                 AudioOutput = (AudioOutputMode)SelectedAudioOutput,
                 MaxToolCallIterations = (int)MaxToolCallIterations,
             };
 
             _settingsService.PipelineSettings = new PipelineSettings
             {
-                WakeWord = BuildStage(WakeWordEnabled, WakeWordMode, WakeWordRemoteUrl, WakeWordRemoteApiKey, WakeWordRemoteModelId, WakeWordRemoteTimeout, WakeWordLocalModelPath, WakeWordLocalServerPort, WakeWordLocalParameters),
                 Vad = BuildStage(VadEnabled, VadMode, VadRemoteUrl, VadRemoteApiKey, VadRemoteModelId, VadRemoteTimeout, VadLocalModelPath, VadLocalServerPort, VadLocalParameters),
                 Stt = BuildStage(SttEnabled, SttMode, SttRemoteUrl, SttRemoteApiKey, SttRemoteModelId, SttRemoteTimeout, SttLocalModelPath, SttLocalServerPort, SttLocalParameters),
                 Llm = BuildStage(LlmEnabled, LlmMode, LlmRemoteUrl, LlmRemoteApiKey, LlmRemoteModelId, LlmRemoteTimeout, LlmLocalModelPath, LlmLocalServerPort, LlmLocalParameters),
@@ -491,7 +426,6 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
         if (idx < 0 || !int.TryParse(param.AsSpan(idx + 1), out var mode)) return;
         switch (param[..idx])
         {
-            case "WakeWord": WakeWordMode = mode; break;
             case "Vad": VadMode = mode; break;
             case "Stt": SttMode = mode; break;
             case "Llm": LlmMode = mode; break;

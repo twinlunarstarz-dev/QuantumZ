@@ -244,8 +244,8 @@ public sealed class ModelRegistry(
     {
         ProviderCapability.Tts => location switch
         {
-            ProviderLocation.Local => 0,
-            ProviderLocation.BuiltIn => 1,
+            ProviderLocation.BuiltIn => 0,
+            ProviderLocation.Local => 1,
             ProviderLocation.Hybrid => 2,
             ProviderLocation.Remote => 3,
             _ => 4

@@ -1,14 +1,21 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using QuantumZ.Core.Interfaces;
 using QuantumZ.Core.Models;
+using QuantumZ.Infrastructure.Native;
 
 namespace QuantumZ.Infrastructure.Services;
 
-public sealed class WhisperLocalSttProvider(IModelRegistry modelRegistry, ISettingsService settings, IDebugLogger debugLogger, ILocalBinaryManager binaryManager) : ISttProvider
+public sealed class WhisperLocalSttProvider(IModelRegistry modelRegistry, ISettingsService settings, IDebugLogger debugLogger, INativeRuntimeService nativeRuntimeService) : ISttProvider, IDisposable
 {
+    private const int SampleRate = 16000;
+    private readonly SemaphoreSlim _runtimeGate = new(1, 1);
+    private IntPtr _handle;
+    private string? _loadedModelPath;
+
     public ProviderDescriptor Descriptor { get; } = new(
         Id: "local.whisper",
         DisplayName: "Local Whisper STT",
@@ -24,7 +31,12 @@ public sealed class WhisperLocalSttProvider(IModelRegistry modelRegistry, ISetti
 
         try
         {
-            await binaryManager.EnsureBinaryAsync("whisper-cpp");
+            if (!await nativeRuntimeService.IsRuntimeAvailableAsync(NativeRuntimeKind.Stt, ct))
+            {
+                debugLogger.Log("WhisperLocalSttProvider", "Local Whisper is unavailable because libquantumz_whisper.so is not packaged for this Android ABI.", LogLevel.Warning);
+                return false;
+            }
+
             var modelPath = await ResolveWhisperModelPathAsync(ct);
             if (string.IsNullOrWhiteSpace(modelPath) || !File.Exists(modelPath))
             {
@@ -45,7 +57,7 @@ public sealed class WhisperLocalSttProvider(IModelRegistry modelRegistry, ISetti
     {
         try
         {
-            await binaryManager.EnsureBinaryAsync("whisper-cpp");
+            await EnsureHandleAsync(ct);
         }
         catch (Exception ex)
         {
@@ -56,58 +68,25 @@ public sealed class WhisperLocalSttProvider(IModelRegistry modelRegistry, ISetti
 
     public async ValueTask<string> TranscribeAsync(byte[] pcm16Audio, CancellationToken ct = default)
     {
-        var modelPath = await ResolveWhisperModelPathAsync(ct)
-            ?? throw new InvalidOperationException("No local Whisper model is available.");
-
-        string? audioFile = null;
-        string? actualResultFile = null;
-        string? stdoutFile = null;
-        string? stderrFile = null;
         try
         {
-            var whisperBin = await binaryManager.EnsureBinaryAsync("whisper-cpp");
-            audioFile = Path.Combine(Path.GetTempPath(), $"stt_{Guid.NewGuid():N}.wav");
-             
-            // Whisper expects WAV format (PCM16). We need to wrap the raw PCM bytes in a WAV header.
-            await WriteWavHeaderAsync(audioFile, pcm16Audio);
-
-            debugLogger.Log("WhisperLocalSttProvider", $"Transcribing audio using Whisper model at {modelPath}", LogLevel.Info);
-
-            var outputPrefix = Path.Combine(Path.GetTempPath(), $"stt_{Guid.NewGuid():N}");
-            actualResultFile = $"{outputPrefix}.txt";
-            stdoutFile = $"{outputPrefix}.stdout.log";
-            stderrFile = $"{outputPrefix}.stderr.log";
-            var command = $"{QuoteShellArg(whisperBin)} -m {QuoteShellArg(modelPath)} -f {QuoteShellArg(audioFile)} -otxt -of {QuoteShellArg(outputPrefix)} > {QuoteShellArg(stdoutFile)} 2> {QuoteShellArg(stderrFile)}";
-
-            var exitCode = ExecuteShellCommand(command);
-            if (exitCode != 0)
-            {
-                var stderr = File.Exists(stderrFile) ? await File.ReadAllTextAsync(stderrFile, ct) : string.Empty;
-                throw new InvalidOperationException($"whisper.cpp exited with code {exitCode}. {stderr}".Trim());
-            }
-             
-            if (!File.Exists(actualResultFile))
-            {
-                debugLogger.Log("WhisperLocalSttProvider", $"Transcription output file not found at {actualResultFile}", LogLevel.Error);
-                return string.Empty;
-            }
-
-            var text = await File.ReadAllTextAsync(actualResultFile, ct);
-
-            return text.Trim();
+            var handle = await EnsureHandleAsync(ct);
+            debugLogger.Log("WhisperLocalSttProvider", $"Transcribing raw PCM16 audio using native Whisper model '{Path.GetFileName(_loadedModelPath)}'.", LogLevel.Info);
+            ct.ThrowIfCancellationRequested();
+            return WhisperNative.TranscribePcm16(handle, pcm16Audio, SampleRate);
         }
         catch (Exception ex)
         {
             debugLogger.Log("WhisperLocalSttProvider", $"Transcription failed: {ex.Message}", LogLevel.Error);
             throw;
         }
-        finally
-        {
-            TryDelete(audioFile);
-            TryDelete(actualResultFile);
-            TryDelete(stdoutFile);
-            TryDelete(stderrFile);
-        }
+    }
+
+    public void Dispose()
+    {
+        DestroyHandle();
+        _runtimeGate.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private async ValueTask<string?> ResolveWhisperModelPathAsync(CancellationToken ct)
@@ -123,59 +102,60 @@ public sealed class WhisperLocalSttProvider(IModelRegistry modelRegistry, ISetti
         return null;
     }
 
-    private async ValueTask WriteWavHeaderAsync(string path, byte[] pcmData)
+    private async ValueTask<IntPtr> EnsureHandleAsync(CancellationToken ct)
     {
-        // Simple WAV header for 16kHz Mono PCM16
-        using var stream = File.OpenWrite(path);
-        byte[] header = new byte[44];
-        
-        // RIFF chunk descriptor
-        header[0] = (byte)'R'; header[1] = (byte)'I'; header[2] = (byte)'F'; header[3] = (byte)'F';
-        uint fileSize = (uint)(pcmData.Length + 36);
-        BitConverter.TryWriteBytes(header.AsSpan(4, 4), fileSize);
-        header[8] = (byte)'W'; header[9] = (byte)'A'; header[10] = (byte)'V'; header[11] = (byte)'E';
-
-        // fmt sub-chunk
-        header[12] = (byte)'f'; header[13] = (byte)'m'; header[14] = (byte)'t'; header[15] = (byte)' ';
-        BitConverter.TryWriteBytes(header.AsSpan(16, 4), 16u); // Subchunk1Size
-        BitConverter.TryWriteBytes(header.AsSpan(20, 2), (short)1); // AudioFormat (PCM)
-        BitConverter.TryWriteBytes(header.AsSpan(22, 2), (short)1); // NumChannels
-        BitConverter.TryWriteBytes(header.AsSpan(24, 4), 16000u); // SampleRate
-        uint byteRate = 16000 * 1 * 2;
-        BitConverter.TryWriteBytes(header.AsSpan(28, 4), byteRate);
-        BitConverter.TryWriteBytes(header.AsSpan(32, 2), (short)2); // BlockAlign
-        BitConverter.TryWriteBytes(header.AsSpan(34, 2), (short)16); // BitsPerSample
-
-        // data sub-chunk
-        header[36] = (byte)'d'; header[37] = (byte)'a'; header[38] = (byte)'t'; header[39] = (byte)'a';
-        BitConverter.TryWriteBytes(header.AsSpan(40, 4), (uint)pcmData.Length);
-
-        await stream.WriteAsync(header);
-        await stream.WriteAsync(pcmData);
-    }
-
-    private int ExecuteShellCommand(string command)
-    {
+        await _runtimeGate.WaitAsync(ct);
         try
         {
-            var runtime = Java.Lang.Runtime.GetRuntime();
-            var process = runtime.Exec(new string[] { "sh", "-c", command });
-            return process.WaitFor(); 
+            if (!await nativeRuntimeService.IsRuntimeAvailableAsync(NativeRuntimeKind.Stt, ct))
+                throw new InvalidOperationException("Local Whisper native runtime is unavailable. Package libquantumz_whisper.so for this Android ABI.");
+
+            var modelPath = await ResolveWhisperModelPathAsync(ct)
+                ?? throw new InvalidOperationException("No local Whisper model is available.");
+
+            if (!File.Exists(modelPath))
+                throw new FileNotFoundException("Local Whisper model file does not exist.", modelPath);
+
+            if (_handle != IntPtr.Zero && string.Equals(_loadedModelPath, modelPath, StringComparison.Ordinal))
+                return _handle;
+
+            DestroyHandle();
+            _handle = WhisperNative.Create(modelPath, BuildParamsJson());
+            _loadedModelPath = modelPath;
+            debugLogger.Log("WhisperLocalSttProvider", $"Loaded native Whisper runtime for model '{Path.GetFileName(modelPath)}'.", LogLevel.Info);
+            return _handle;
         }
-        catch (Exception ex)
+        finally
         {
-            debugLogger.Log("WhisperLocalSttProvider", $"Shell execution failed: {ex.Message}", LogLevel.Error);
-            throw;
+            _runtimeGate.Release();
         }
     }
 
-    private static void TryDelete(string? path)
+    private string BuildParamsJson()
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        var parameters = settings.GetActiveProvider("STT")?.Parameters ?? [];
+        var additionalParameters = settings.PipelineSettings.Stt.Local?.AdditionalParameters;
+        if (parameters.Count == 0 && string.IsNullOrWhiteSpace(additionalParameters))
+            return "{}";
 
-        try { File.Delete(path); }
-        catch { }
+        var payload = new Dictionary<string, object?>();
+        foreach (var pair in parameters)
+            payload[pair.Key] = pair.Value;
+
+        if (!string.IsNullOrWhiteSpace(additionalParameters))
+            payload["additionalParameters"] = additionalParameters;
+
+        return JsonSerializer.Serialize(payload);
     }
 
-    private static string QuoteShellArg(string value) => $"'{value.Replace("'", "'\\''")}'";
+    private void DestroyHandle()
+    {
+        if (_handle != IntPtr.Zero)
+        {
+            WhisperNative.Destroy(_handle);
+            _handle = IntPtr.Zero;
+        }
+
+        _loadedModelPath = null;
+    }
 }

@@ -1,4 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using QuantumZ.Core.Models;
+using QuantumZ.UI.Pages;
 
 namespace QuantumZ.UI.ViewModels;
 
@@ -224,6 +226,37 @@ public partial class MainAssistantViewModel
         }
     }
 
+    private async ValueTask<bool> EnsureSetupCompletedAsync()
+    {
+        if (_settingsService.SetupSettings.IsCompleted)
+            return true;
+
+        IsListening = false;
+        AiStatusText = "Setup Required";
+        StatusColor = "#FFB300";
+        TranscriptionStatusText = "SETUP REQUIRED";
+        StreamingTranscriptDisplay = "Complete QuantumZ setup before enabling listening.";
+        _debugLogger.Log("MainAssistant", "Listening blocked because first-run setup is incomplete.", LogLevel.Warning);
+
+        await _dialogService.ShowAlertAsync("Setup Required", "Complete QuantumZ setup before starting the microphone service.");
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            var page = _serviceProvider.GetRequiredService<SetupPage>();
+            var navigation = Application.Current?.MainPage?.Navigation;
+            if (navigation is not null)
+            {
+                if (!navigation.NavigationStack.Any(item => item is SetupPage))
+                    await navigation.PushAsync(page);
+            }
+            else if (Application.Current is not null)
+            {
+                Application.Current.MainPage = new NavigationPage(page);
+            }
+        });
+
+        return false;
+    }
+
     private void StartMicrophoneService()
     {
         try
@@ -259,6 +292,9 @@ public partial class MainAssistantViewModel
     {
         try
         {
+            if (!await EnsureSetupCompletedAsync())
+                return;
+
 #if ANDROID
             var context = global::Android.App.Application.Context;
             var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));

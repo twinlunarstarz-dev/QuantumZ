@@ -1,19 +1,21 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.Storage;
 using QuantumZ.Core.Interfaces;
+using QuantumZ.Core.Models;
+using QuantumZ.Infrastructure.Native;
 
 namespace QuantumZ.Infrastructure.Services
 {
-    public class LlamaLocalManager(IDebugLogger debugLogger, ILocalBinaryManager binaryManager, ISettingsService settings) : ILlamaLocalManager
+    public class LlamaLocalManager(IDebugLogger debugLogger, INativeRuntimeService nativeRuntimeService, ISettingsService settings) : ILlamaLocalManager, IDisposable
     {
-        private const string BinaryId = "llama-server";
-        private const string LocalUrl = "http://localhost:8025";
-        private const int LocalPort = 8025;
         private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
+        private IntPtr _handle;
+        private string? _loadedModelPath;
         private bool _isRunning;
 
         public bool IsServerRunning
@@ -22,7 +24,7 @@ namespace QuantumZ.Infrastructure.Services
             private set => _isRunning = value;
         }
 
-        public bool IsBinaryAvailable() => binaryManager.IsBinaryInstalled(BinaryId);
+        public bool IsBinaryAvailable() => nativeRuntimeService.IsRuntimeAvailableAsync(NativeRuntimeKind.Llm).AsTask().GetAwaiter().GetResult();
 
         public async ValueTask<bool> EnsureServerRunningAsync()
         {
@@ -31,7 +33,7 @@ namespace QuantumZ.Infrastructure.Services
             await _lifecycleGate.WaitAsync();
             try
             {
-                return await EnsureServerRunningCoreAsync();
+                return await EnsureRuntimeLoadedCoreAsync(CancellationToken.None);
             }
             finally
             {
@@ -39,102 +41,63 @@ namespace QuantumZ.Infrastructure.Services
             }
         }
 
-        private async ValueTask<bool> EnsureServerRunningCoreAsync()
+        private async ValueTask<bool> EnsureRuntimeLoadedCoreAsync(CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
+
+            if (!await nativeRuntimeService.IsRuntimeAvailableAsync(NativeRuntimeKind.Llm, ct))
+            {
+                debugLogger.Log("LlamaLocalManager", "Local llama runtime is unavailable because libquantumz_llama.so is not packaged for this Android ABI.", LogLevel.Warning);
+                DestroyHandle();
+                return false;
+            }
+
             var modelPath = ResolveModelPath();
             if (string.IsNullOrWhiteSpace(modelPath))
             {
-                debugLogger.Log("LlamaLocalManager", "Local llama server is disabled because no local GGUF model was found in AppData/models/llm or selected as an absolute model path.");
-                IsServerRunning = false;
+                debugLogger.Log("LlamaLocalManager", "Local llama runtime is disabled because no local GGUF model was found in AppData/models/llm or selected as an absolute model path.", LogLevel.Warning);
+                DestroyHandle();
                 return false;
             }
 
-            try
-            {
-                await binaryManager.EnsureBinaryAsync(BinaryId);
-            }
-            catch (Exception ex)
-            {
-                debugLogger.Log("LlamaLocalManager", $"Failed to ensure llama-server binary: {ex.Message}");
-                IsServerRunning = false;
-                return false;
-            }
+            if (!Path.GetFileName(modelPath).Contains("q4", StringComparison.OrdinalIgnoreCase))
+                debugLogger.Log("LlamaLocalManager", $"Selected local model is not clearly Q4 quantized: {modelPath}", LogLevel.Warning);
 
-            if (await CheckHealthAsync())
+            if (_handle != IntPtr.Zero && string.Equals(_loadedModelPath, modelPath, StringComparison.Ordinal))
             {
-                debugLogger.Log("LlamaLocalManager", "Local llama server is already running and healthy.");
                 IsServerRunning = true;
                 return true;
             }
 
-            debugLogger.Log("LlamaLocalManager", "Starting local llama server process...");
-            if (await StartServerAsync())
-            {
-                for (var i = 0; i < 20; i++)
-                {
-                    await Task.Delay(500);
-                    if (await CheckHealthAsync())
-                    {
-                        debugLogger.Log("LlamaLocalManager", $"Local llama server started successfully after {(i + 1) * 500}ms.");
-                        IsServerRunning = true;
-                        return true;
-                    }
-                }
-            }
+            DestroyHandle();
 
-            debugLogger.Log("LlamaLocalManager", "Failed to start local llama server or health check failed.");
-            IsServerRunning = false;
-            return false;
+            try
+            {
+                _handle = LlamaNative.Create(modelPath, BuildParamsJson());
+                _loadedModelPath = modelPath;
+                IsServerRunning = true;
+                debugLogger.Log("LlamaLocalManager", $"Loaded local llama native runtime for model '{Path.GetFileName(modelPath)}'.", LogLevel.Info);
+                return true;
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or InvalidOperationException)
+            {
+                debugLogger.Log("LlamaLocalManager", $"Failed to load local llama native runtime: {ex.Message}", LogLevel.Error);
+                DestroyHandle();
+                return false;
+            }
         }
 
         public async ValueTask StopServerAsync()
         {
-            debugLogger.Log("LlamaLocalManager", "Stopping local llama server...");
+            await _lifecycleGate.WaitAsync();
             try
             {
-                ExecuteShellCommand($"pkill -f {ShellQuote(BinaryId)}");
-                IsServerRunning = false;
-                debugLogger.Log("LlamaLocalManager", "Stop command sent successfully.");
+                DestroyHandle();
+                debugLogger.Log("LlamaLocalManager", "Local llama native runtime handle released.", LogLevel.Info);
             }
-            catch (Exception ex)
+            finally
             {
-                debugLogger.Log("LlamaLocalManager", $"Error stopping server: {ex.Message}");
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private async ValueTask<bool> StartServerAsync()
-        {
-            try
-            {
-                var binaryPath = await binaryManager.EnsureBinaryAsync(BinaryId);
-                var modelPath = ResolveModelPath();
-                if (string.IsNullOrWhiteSpace(modelPath))
-                {
-                    debugLogger.Log("LlamaLocalManager", "No local GGUF model was found. Place a Q4 GGUF in AppData/models/llm or select an absolute model path.");
-                    return false;
-                }
-
-                if (!Path.GetFileName(modelPath).Contains("q4", StringComparison.OrdinalIgnoreCase))
-                    debugLogger.Log("LlamaLocalManager", $"Selected local model is not clearly Q4 quantized: {modelPath}");
-
-                var command = string.Join(' ',
-                    ShellQuote(binaryPath),
-                    "-m", ShellQuote(modelPath),
-                    "--host", "127.0.0.1",
-                    "--port", LocalPort.ToString(),
-                    "-c", "4096",
-                    ">", "/dev/null", "2>&1", "&");
-
-                ExecuteShellCommand(command);
-                debugLogger.Log("LlamaLocalManager", $"llama-server launch requested for model '{Path.GetFileName(modelPath)}'.");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                debugLogger.Log("LlamaLocalManager", $"Error executing start command: {ex.Message}");
-                return false;
+                _lifecycleGate.Release();
             }
         }
 
@@ -170,47 +133,70 @@ namespace QuantumZ.Infrastructure.Services
 
         public async ValueTask<bool> CheckHealthAsync(CancellationToken ct = default)
         {
+            ct.ThrowIfCancellationRequested();
+
+            var runtimeAvailable = await nativeRuntimeService.IsRuntimeAvailableAsync(NativeRuntimeKind.Llm, ct);
+            var modelPath = ResolveModelPath();
+            IsServerRunning = runtimeAvailable && !string.IsNullOrWhiteSpace(modelPath) && File.Exists(modelPath);
+            return IsServerRunning;
+        }
+
+        public async ValueTask<string> InferAsync(string prompt, int maxTokens, CancellationToken ct = default)
+        {
+            await _lifecycleGate.WaitAsync(ct);
             try
             {
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(TimeSpan.FromSeconds(2));
-                using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-                using var response = await client.GetAsync($"{LocalUrl}/health", cts.Token);
-                if (response.IsSuccessStatusCode)
-                {
-                    IsServerRunning = true;
-                    return true;
-                }
+                if (!await EnsureRuntimeLoadedCoreAsync(ct))
+                    throw new InvalidOperationException("Local llama native runtime is unavailable. Ensure libquantumz_llama.so is packaged and a local GGUF model exists.");
 
-                using var modelsResponse = await client.GetAsync($"{LocalUrl}/v1/models", cts.Token);
-                IsServerRunning = modelsResponse.IsSuccessStatusCode;
-                return IsServerRunning;
+                ct.ThrowIfCancellationRequested();
+                return LlamaNative.Infer(_handle, prompt, maxTokens);
             }
-            catch
+            catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or InvalidOperationException)
             {
-                IsServerRunning = false;
-                return false;
+                debugLogger.Log("LlamaLocalManager", $"Local llama inference failed: {ex.Message}", LogLevel.Error);
+                throw;
+            }
+            finally
+            {
+                _lifecycleGate.Release();
             }
         }
 
-        private static string? FirstNonEmpty(params string?[] values) =>
-            values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
-
-        private static string ShellQuote(string value) =>
-            "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
-
-        private void ExecuteShellCommand(string command)
+        public void Dispose()
         {
-            try
+            DestroyHandle();
+            _lifecycleGate.Dispose();
+            GC.SuppressFinalize(this);
+        }
+
+        private string BuildParamsJson()
+        {
+            var parameters = settings.GetActiveProvider("LLM")?.Parameters ?? [];
+            var additionalParameters = settings.PipelineSettings.Llm.Local?.AdditionalParameters;
+            if (parameters.Count == 0 && string.IsNullOrWhiteSpace(additionalParameters))
+                return "{}";
+
+            var payload = new Dictionary<string, object?>();
+            foreach (var pair in parameters)
+                payload[pair.Key] = pair.Value;
+
+            if (!string.IsNullOrWhiteSpace(additionalParameters))
+                payload["additionalParameters"] = additionalParameters;
+
+            return JsonSerializer.Serialize(payload);
+        }
+
+        private void DestroyHandle()
+        {
+            if (_handle != IntPtr.Zero)
             {
-                var runtime = Java.Lang.Runtime.GetRuntime();
-                runtime.Exec(new[] { "sh", "-c", command });
+                LlamaNative.Destroy(_handle);
+                _handle = IntPtr.Zero;
             }
-            catch (Exception ex)
-            {
-                debugLogger.Log("LlamaLocalManager", $"Shell execution failed: {ex.Message}");
-                throw;
-            }
+
+            _loadedModelPath = null;
+            IsServerRunning = false;
         }
     }
 }

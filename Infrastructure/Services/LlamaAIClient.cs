@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuantumZ.Core.Interfaces;
@@ -52,6 +54,14 @@ public class LlamaAIClient(
 
             try
             {
+                if (IsLocalBaseUrl(candidate.BaseUrl))
+                {
+                    var nativePrompt = BuildNativePrompt(messages);
+                    var nativeContent = await llamaLocalManager.InferAsync(nativePrompt, request.MaxTokens, ct);
+                    debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, "Received native local LLM response.", new { ResponseLength = nativeContent.Length, RequestedModelId = candidate.ModelId }));
+                    return new AiResponse(nativeContent, ModelId: candidate.ModelId);
+                }
+
                 var endpoint = BuildEndpoint(candidate.BaseUrl, "chat/completions");
                 var llamaRequest = BuildChatRequest(candidate.ModelId, messages, request.Temperature, request.MaxTokens, stream: false, toolDefinitions);
 
@@ -97,6 +107,24 @@ public class LlamaAIClient(
 
         await foreach (var candidate in GetExecutionCandidatesAsync(ct))
         {
+            if (IsLocalBaseUrl(candidate.BaseUrl))
+            {
+                string nativeContent;
+                try
+                {
+                    nativeContent = await llamaLocalManager.InferAsync(BuildNativePrompt(messages), request.MaxTokens, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    lastError = ex;
+                    debugLogger.Log("AIClient", $"Streaming native local LLM request failed for {candidate.ModelId}; trying fallback. {ex.Message}", LogLevel.Warning);
+                    continue;
+                }
+
+                yield return nativeContent;
+                yield break;
+            }
+
             var endpoint = BuildEndpoint(candidate.BaseUrl, "chat/completions");
             var llamaRequest = BuildChatRequest(candidate.ModelId, messages, request.Temperature, request.MaxTokens, stream: true, toolDefinitions: null);
 
@@ -208,6 +236,27 @@ public class LlamaAIClient(
             wire["tool_calls"] = message.ToolCalls;
 
         return wire;
+    }
+
+    private static string BuildNativePrompt(List<Dictionary<string, object?>> messages)
+    {
+        var builder = new StringBuilder();
+        foreach (var message in messages)
+        {
+            if (!message.TryGetValue("content", out var contentValue) || contentValue is not string content || string.IsNullOrWhiteSpace(content))
+                continue;
+
+            var role = message.TryGetValue("role", out var roleValue) && roleValue is string roleText
+                ? roleText
+                : "user";
+
+            builder.Append(CultureInfo.InvariantCulture.TextInfo.ToTitleCase(role));
+            builder.Append(": ");
+            builder.AppendLine(content.Trim());
+        }
+
+        builder.Append("Assistant: ");
+        return builder.ToString();
     }
 
     private async ValueTask<List<Dictionary<string, object?>>?> BuildToolDefinitionsAsync(AiRequest request, CancellationToken ct)
@@ -372,10 +421,9 @@ public class LlamaAIClient(
 
     private async ValueTask<bool> IsEndpointAvailableAsync(string baseUrl, CancellationToken ct)
     {
-        if (string.Equals(NormalizeOpenAiBaseUrl(baseUrl), LocalBaseUrl, StringComparison.OrdinalIgnoreCase)
-            && !await llamaLocalManager.EnsureServerRunningAsync())
+        if (IsLocalBaseUrl(baseUrl))
         {
-            return false;
+            return await llamaLocalManager.EnsureServerRunningAsync();
         }
 
         try
@@ -394,6 +442,9 @@ public class LlamaAIClient(
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static bool IsLocalBaseUrl(string baseUrl) =>
+        string.Equals(NormalizeOpenAiBaseUrl(baseUrl), LocalBaseUrl, StringComparison.OrdinalIgnoreCase);
 
     private record LlamaModelsResponse(List<LlamaModel>? Data);
     private record LlamaModel(string Id);

@@ -89,7 +89,7 @@ public class LocalBinaryManager(IDebugLogger debugLogger) : ILocalBinaryManager
 
         if (IsBinaryInstalled(binaryId))
         {
-            SetExecutablePermission(path);
+            LogPackagedExecutionOnly(binaryId, path);
             debugLogger.Log("LocalBinaryManager", $"Binary {binaryId} already installed at {path}", LogLevel.Info);
             return path;
         }
@@ -110,7 +110,7 @@ public class LocalBinaryManager(IDebugLogger debugLogger) : ILocalBinaryManager
                         if (!File.Exists(path) || new FileInfo(path).Length == 0)
                             throw new InvalidOperationException($"Downloaded {binaryId} was empty or missing.");
 
-                        SetExecutablePermission(path);
+                        LogPackagedExecutionOnly(binaryId, path);
 
                         debugLogger.Log("LocalBinaryManager", $"Successfully installed {binaryId} at {path}", LogLevel.Info);
                         return path;
@@ -202,26 +202,16 @@ public class LocalBinaryManager(IDebugLogger debugLogger) : ILocalBinaryManager
         return Path.Combine(binDir, binaryId);
     }
 
-    private void SetExecutablePermission(string path)
+    private void LogPackagedExecutionOnly(string binaryId, string path)
     {
-        try
+        if (IsDownloadedExecutionBlockedOnAndroid())
         {
-            // On Android, we use shell to chmod +x the file in internal storage
-            var runtime = Java.Lang.Runtime.GetRuntime();
-            var process = runtime.Exec(new string[] { "sh", "-c", $"chmod 700 {QuoteShellArg(path)}" });
-            var exitCode = process.WaitFor();
-            if (exitCode != 0)
-            {
-                debugLogger.Log("LocalBinaryManager", $"chmod returned exit code {exitCode} for {path}", LogLevel.Warning);
-            }
-        }
-        catch (Exception ex)
-        {
-            debugLogger.Log("LocalBinaryManager", $"Warning: Could not set executable permission for {path}: {ex.Message}. This may cause execution failure on Android 10+.", LogLevel.Warning);
+            debugLogger.Log(
+                "LocalBinaryManager",
+                $"Downloaded executable path for {binaryId} is not used on Android 10+. Package native libraries instead: {path}",
+                LogLevel.Warning);
         }
     }
-
-    private static string QuoteShellArg(string value) => $"'{value.Replace("'", "'\\''")}'";
 
     private static string? TryGetPackagedBinaryPath(string binaryId)
     {

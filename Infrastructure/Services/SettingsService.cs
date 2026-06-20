@@ -36,7 +36,7 @@ public sealed class SettingsService : ISettingsService
     private const string LlamaModelIdDefault = "llama3";
     private const string SelectedModelNameDefault = "llama3";
     private const string SttModelIdDefault = "whisper-base";
-    private const string TtsModelIdDefault = "tts-default";
+    private const string TtsModelIdDefault = "builtin.android-tts";
 
     private const string McpServersFile = "mcp_servers.json";
     private const string GlobalSettingsFile = "global_settings.json";
@@ -44,6 +44,7 @@ public sealed class SettingsService : ISettingsService
     private const string SummarizationTriggersFile = "summarization_triggers.json";
     private const string PipelineSettingsFile = "pipeline_settings.json";
     private const string VoiceAssistantSettingsFile = "voice_assistant_settings.json";
+    private const string SetupSettingsFile = "setup_settings.json";
 
     public event Action<ISettingsService>? SettingsChanged;
 
@@ -97,6 +98,12 @@ public sealed class SettingsService : ISettingsService
     {
         get => LoadComplexFromJson<VoiceAssistantSettings>(VoiceAssistantSettingsFile) ?? new VoiceAssistantSettings();
         set { SaveComplexToJson(VoiceAssistantSettingsFile, value); NotifySettingsChanged(); }
+    }
+
+    public SetupSettings SetupSettings
+    {
+        get => LoadComplexFromJson<SetupSettings>(SetupSettingsFile) ?? new SetupSettings();
+        set { SaveComplexToJson(SetupSettingsFile, value); NotifySettingsChanged(); }
     }
 
     public List<string> WakeWords

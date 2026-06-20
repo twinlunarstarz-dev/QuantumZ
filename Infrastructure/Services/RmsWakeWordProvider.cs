@@ -4,9 +4,9 @@ using QuantumZ.Core.Models;
 namespace QuantumZ.Infrastructure.Services;
 
 /// <summary>
-/// Fallback wake word provider that triggers on sustained speech energy (RMS threshold).
-/// Requires no model file — active immediately after service registration.
-/// This is the BuiltIn-mode wake word option.
+/// Release-safe trigger gate that opens the assistant loop after sustained speech energy.
+/// It does not perform acoustic wake-phrase recognition and requires no model file.
+/// Detections are labeled with the configured trigger phrase for pipeline continuity.
 /// </summary>
 internal sealed class RmsWakeWordProvider(ISettingsService settingsService, IDebugLogger logger)
     : IWakeWordProvider
@@ -28,7 +28,7 @@ internal sealed class RmsWakeWordProvider(ISettingsService settingsService, IDeb
     public ValueTask InitializeAsync(CancellationToken cancellationToken = default)
     {
         logger.Log(nameof(RmsWakeWordProvider),
-            "RmsWakeWordProvider ready (no model required)",
+            $"Sustained-speech trigger gate ready for phrase label '{TriggerPhrase}' (no wake model required)",
             LogLevel.Info);
         return ValueTask.CompletedTask;
     }

@@ -48,6 +48,9 @@ public interface ISettingsService
     /// <summary>Gets or sets the voice assistant behavioral settings.</summary>
     VoiceAssistantSettings VoiceAssistantSettings { get; set; }
 
+    /// <summary>Gets or sets the persistent first-run setup state.</summary>
+    SetupSettings SetupSettings { get; set; }
+
     // Reactive Update Event
     event Action<ISettingsService>? SettingsChanged;
 }

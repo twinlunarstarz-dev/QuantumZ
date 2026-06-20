@@ -26,12 +26,24 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
     <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.20" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageReference Include="Xamarin.AndroidX.Core" Version="1.17.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android36.0'">
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
+  </ItemGroup>
+
+  <!-- Native AI wrapper libraries should be placed under Platforms/Android/NativeLibs/<abi>/.
+       Expected arm64-v8a wrapper files:
+         libquantumz_llama.so   (loaded as quantumz_llama)
+         libquantumz_whisper.so (loaded as quantumz_whisper)
+         libquantumz_piper.so   (loaded as quantumz_piper)
+       These QuantumZ-specific wrappers provide a stable flat C ABI over upstream engines.
+       Build remains valid when the directory does not exist during this foundation slice. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android36.0'">
+    <AndroidNativeLibrary Include="Platforms/Android/NativeLibs/arm64-v8a/*.so" Condition="Exists('Platforms/Android/NativeLibs/arm64-v8a')" />
   </ItemGroup>
 
 </Project>

@@ -24,8 +24,8 @@ public sealed class ProviderRouter(
 
     private static readonly ProviderLocation[] TtsPreferredLocations =
     [
-        ProviderLocation.Local,
         ProviderLocation.BuiltIn,
+        ProviderLocation.Local,
         ProviderLocation.Hybrid,
         ProviderLocation.Remote
     ];

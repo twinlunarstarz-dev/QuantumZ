@@ -27,16 +27,65 @@
         </ResourceDictionary>
     </ContentPage.Resources>
 
-    <ScrollView BackgroundColor="{StaticResource CrimsonBackground}">
+    <Grid BackgroundColor="{StaticResource CrimsonBackground}">
+        <BoxView BackgroundColor="{StaticResource CrimsonBackground}" />
+
+        <BoxView HeightRequest="340"
+                 Opacity="0.30"
+                 VerticalOptions="Start">
+            <BoxView.Background>
+                <RadialGradientBrush Center="0.5,0.0" Radius="0.9">
+                    <GradientStop Color="{StaticResource CrimsonNeonDim}" Offset="0.0" />
+                    <GradientStop Color="{StaticResource CrimsonBackground}" Offset="1.0" />
+                </RadialGradientBrush>
+            </BoxView.Background>
+        </BoxView>
+
+        <Grid InputTransparent="True"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              RowSpacing="44"
+              Opacity="0.22">
+            <BoxView Grid.Row="0" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="1" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="2" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="3" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="4" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="5" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+            <BoxView Grid.Row="6" HeightRequest="1" BackgroundColor="{StaticResource CrimsonScanline}" />
+        </Grid>
+
+        <ScrollView>
         <VerticalStackLayout Padding="16" Spacing="16">
+
+            <Border Style="{StaticResource HudPanel}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <VerticalStackLayout Grid.Column="0" Spacing="3">
+                        <Label Text="SYSTEM CONFIG"
+                               TextColor="{StaticResource CrimsonTextPrimary}"
+                               FontSize="24"
+                               FontAttributes="Bold"
+                               CharacterSpacing="1.1" />
+                        <Label Text="PROVIDER ROUTING // MODELS // MCP FABRIC"
+                               Style="{StaticResource CyberLabelMuted}"
+                               FontSize="10"
+                               CharacterSpacing="1.2" />
+                    </VerticalStackLayout>
+
+                    <Border Grid.Column="1"
+                            Style="{StaticResource StatusPill}"
+                            VerticalOptions="Center">
+                        <Label Text="CONFIG"
+                               TextColor="{StaticResource CrimsonSuccess}"
+                               FontSize="10"
+                               FontAttributes="Bold"
+                               CharacterSpacing="1.2" />
+                    </Border>
+                </Grid>
+            </Border>
 
             <!-- Status Message -->
             <Border IsVisible="{Binding StatusMessage, Converter={StaticResource StringNotEmptyConverter}}"
-                    BackgroundColor="{StaticResource CrimsonNeonDim}"
-                    Stroke="{StaticResource CrimsonPrimaryAccent}"
-                    StrokeThickness="1"
-                    Padding="12"
-                    StrokeShape="RoundRectangle 8">
+                    Style="{StaticResource StatusPill}">
                 <Label Text="{Binding StatusMessage}"
                        TextColor="{StaticResource CrimsonTextPrimary}"
                        FontSize="13"
@@ -44,95 +93,79 @@
             </Border>
 
             <!-- ══ GLOBAL SETTINGS ══════════════════════════════════════════════════ -->
-            <Border BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
-                    Stroke="#333333"
-                    StrokeThickness="1"
-                    Padding="16"
-                    StrokeShape="RoundRectangle 8">
+            <Border Style="{StaticResource NeonFrame}">
                 <VerticalStackLayout Spacing="12">
 
-                    <Label Text="GLOBAL SETTINGS"
-                           FontSize="12" FontAttributes="Bold"
-                           TextColor="{StaticResource CrimsonTextSecondary}"
-                           CharacterSpacing="2" />
+                     <Label Text="GLOBAL SETTINGS"
+                            Style="{StaticResource CyberLabelSection}"
+                            Margin="0" />
 
-                    <Label Text="Trigger Phrase"
-                           TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                    <Entry Text="{Binding TriggerPhrase}"
-                           Placeholder="hey quantum"
-                           BackgroundColor="{StaticResource CrimsonSurface}"
-                           TextColor="{StaticResource CrimsonTextPrimary}"
-                           PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
+                     <Label Text="Trigger Phrase"
+                            Style="{StaticResource HudMetricLabel}" />
+                     <Entry Text="{Binding TriggerPhrase}"
+                            Placeholder="hey quantum"
+                            Style="{StaticResource CyberEntry}" />
 
-                    <Label Text="System Prompt"
-                           TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                    <Editor Text="{Binding SystemPrompt}"
-                            HeightRequest="100"
-                            Placeholder="You are QuantumZ, a helpful AI voice assistant..."
-                            BackgroundColor="{StaticResource CrimsonSurface}"
-                            TextColor="{StaticResource CrimsonTextPrimary}"
-                            PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
+                     <Label Text="System Prompt"
+                            Style="{StaticResource HudMetricLabel}" />
+                     <Editor Text="{Binding SystemPrompt}"
+                             HeightRequest="100"
+                             Placeholder="You are QuantumZ, a helpful AI voice assistant..."
+                             Style="{StaticResource CyberEditor}" />
 
-                    <Label Text="Pre-roll Buffer"
-                           TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                    <Grid ColumnDefinitions="*,50">
-                        <Slider Grid.Column="0"
-                                Minimum="2" Maximum="15"
-                                Value="{Binding PreRollSeconds, Mode=TwoWay}"
-                                MinimumTrackColor="{StaticResource CrimsonPrimaryAccent}"
-                                MaximumTrackColor="#333333"
-                                ThumbColor="{StaticResource CrimsonPrimaryAccent}" />
+                     <Label Text="Pre-roll Buffer"
+                            Style="{StaticResource HudMetricLabel}" />
+                     <Grid ColumnDefinitions="*,50">
+                         <Slider Grid.Column="0"
+                                 Minimum="2" Maximum="15"
+                                 Value="{Binding PreRollSeconds, Mode=TwoWay}"
+                                 Style="{StaticResource CyberSlider}" />
                         <Label Grid.Column="1"
                                Text="{Binding PreRollSeconds, StringFormat='{0:F1}s'}"
                                TextColor="{StaticResource CrimsonTextPrimary}"
                                HorizontalTextAlignment="End"
                                VerticalOptions="Center" />
-                    </Grid>
+                     </Grid>
 
-                    <Label Text="Post-silence Timeout"
-                           TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                    <Grid ColumnDefinitions="*,50">
-                        <Slider Grid.Column="0"
-                                Minimum="0.5" Maximum="3.0"
-                                Value="{Binding PostSilenceSeconds, Mode=TwoWay}"
-                                MinimumTrackColor="{StaticResource CrimsonPrimaryAccent}"
-                                MaximumTrackColor="#333333"
-                                ThumbColor="{StaticResource CrimsonPrimaryAccent}" />
+                     <Label Text="Post-silence Timeout"
+                            Style="{StaticResource HudMetricLabel}" />
+                     <Grid ColumnDefinitions="*,50">
+                         <Slider Grid.Column="0"
+                                 Minimum="0.5" Maximum="3.0"
+                                 Value="{Binding PostSilenceSeconds, Mode=TwoWay}"
+                                 Style="{StaticResource CyberSlider}" />
                         <Label Grid.Column="1"
                                Text="{Binding PostSilenceSeconds, StringFormat='{0:F1}s'}"
                                TextColor="{StaticResource CrimsonTextPrimary}"
                                HorizontalTextAlignment="End"
                                VerticalOptions="Center" />
-                    </Grid>
+                     </Grid>
 
-                    <Label Text="Wake Word Sensitivity"
-                           TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                    <Grid ColumnDefinitions="*,50">
-                        <Slider Grid.Column="0"
-                                Minimum="0.5" Maximum="1.0"
-                                Value="{Binding WakeWordThreshold, Mode=TwoWay}"
-                                MinimumTrackColor="{StaticResource CrimsonPrimaryAccent}"
-                                MaximumTrackColor="#333333"
-                                ThumbColor="{StaticResource CrimsonPrimaryAccent}" />
+                     <Label Text="Trigger Gate Sensitivity"
+                             Style="{StaticResource HudMetricLabel}" />
+                     <Grid ColumnDefinitions="*,50">
+                         <Slider Grid.Column="0"
+                                 Minimum="0.5" Maximum="1.0"
+                                 Value="{Binding TriggerGateSensitivity, Mode=TwoWay}"
+                                 Style="{StaticResource CyberSlider}" />
                         <Label Grid.Column="1"
-                               Text="{Binding WakeWordThreshold, StringFormat='{0:F2}'}"
+                               Text="{Binding TriggerGateSensitivity, StringFormat='{0:F2}'}"
                                TextColor="{StaticResource CrimsonTextPrimary}"
                                HorizontalTextAlignment="End"
                                VerticalOptions="Center" />
-                    </Grid>
+                     </Grid>
 
-                    <Label Text="Audio Output"
-                           TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                     <Label Text="Audio Output"
+                            Style="{StaticResource HudMetricLabel}" />
                     <Picker ItemsSource="{StaticResource AudioOutputItems}"
                             SelectedIndex="{Binding SelectedAudioOutput, Mode=TwoWay}"
                             Style="{StaticResource CyberPicker}" />
 
                     <Grid ColumnDefinitions="*,Auto,44">
-                        <Label Grid.Column="0"
-                               Text="Max AI Tool Iterations"
-                               TextColor="{StaticResource CrimsonTextSecondary}"
-                               FontSize="11"
-                               VerticalOptions="Center" />
+                         <Label Grid.Column="0"
+                                Text="Max AI Tool Iterations"
+                                Style="{StaticResource HudMetricLabel}"
+                                VerticalOptions="Center" />
                         <Stepper Grid.Column="1"
                                  Minimum="1" Maximum="10" Increment="1"
                                  Value="{Binding MaxToolCallIterations, Mode=TwoWay}" />
@@ -146,174 +179,71 @@
                 </VerticalStackLayout>
             </Border>
 
-            <!-- ══ WAKE WORD ════════════════════════════════════════════════════════ -->
-            <Border BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
-                    Stroke="#333333"
-                    StrokeThickness="1"
-                    Padding="16"
-                    StrokeShape="RoundRectangle 8">
-                <VerticalStackLayout Spacing="12">
-
-                    <Grid ColumnDefinitions="*,Auto">
-                        <Label Grid.Column="0"
-                               Text="WAKE WORD"
-                               FontSize="12" FontAttributes="Bold"
-                               TextColor="{StaticResource CrimsonTextSecondary}"
-                               CharacterSpacing="2"
-                               VerticalOptions="Center" />
-                        <Switch Grid.Column="1"
-                                IsToggled="{Binding WakeWordEnabled, Mode=TwoWay}"
-                                OnColor="{StaticResource CrimsonPrimaryAccent}"
-                                ThumbColor="White" />
-                    </Grid>
-
-                    <VerticalStackLayout IsVisible="{Binding WakeWordEnabled}" Spacing="10">
-                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
-                            <Button Grid.Column="0" Text="Remote"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="WakeWord:0"
-                                    BackgroundColor="{Binding WakeWordRemoteButtonColor}"
-                                    TextColor="{Binding WakeWordRemoteButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
-                            <Button Grid.Column="1" Text="Local"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="WakeWord:1"
-                                    BackgroundColor="{Binding WakeWordLocalButtonColor}"
-                                    TextColor="{Binding WakeWordLocalButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
-                            <Button Grid.Column="2" Text="Built-In"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="WakeWord:2"
-                                    BackgroundColor="{Binding WakeWordBuiltInButtonColor}"
-                                    TextColor="{Binding WakeWordBuiltInButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
-                        </Grid>
-
-                        <VerticalStackLayout IsVisible="{Binding WakeWordShowRemote}" Spacing="8">
-                            <Label Text="Server URL" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                            <Entry Text="{Binding WakeWordRemoteUrl}" Placeholder="http://192.168.1.100:8080"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Model ID" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                            <Entry Text="{Binding WakeWordRemoteModelId}" Placeholder="wake-word-model"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="API Key (optional)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                            <Entry Text="{Binding WakeWordRemoteApiKey}" IsPassword="True"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Timeout (seconds)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                            <Entry Text="{Binding WakeWordRemoteTimeout}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                        </VerticalStackLayout>
-
-                        <VerticalStackLayout IsVisible="{Binding WakeWordShowLocal}" Spacing="8">
-                            <Label Text="Model Path" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                            <Entry Text="{Binding WakeWordLocalModelPath}" Placeholder="/storage/emulated/0/Models/wake.onnx"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Server Port" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                            <Entry Text="{Binding WakeWordLocalServerPort}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Additional Parameters" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                            <Entry Text="{Binding WakeWordLocalParameters}" Placeholder="--threshold 0.5"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                        </VerticalStackLayout>
-
-                        <VerticalStackLayout IsVisible="{Binding WakeWordShowBuiltIn}" Spacing="8">
-                            <Label Text="Using Android Keyword Detector (built-in on-device)"
-                                   TextColor="{StaticResource CrimsonTextSecondary}" FontSize="12"
-                                   LineBreakMode="WordWrap" />
-                        </VerticalStackLayout>
-                    </VerticalStackLayout>
-
-                </VerticalStackLayout>
-            </Border>
-
             <!-- ══ VOICE ACTIVITY DETECTION ════════════════════════════════════════ -->
-            <Border BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
-                    Stroke="#333333"
-                    StrokeThickness="1"
-                    Padding="16"
-                    StrokeShape="RoundRectangle 8">
+            <Border Style="{StaticResource HudPanel}">
                 <VerticalStackLayout Spacing="12">
 
                     <Grid ColumnDefinitions="*,Auto">
                         <Label Grid.Column="0"
-                               Text="VOICE ACTIVITY DETECTION"
-                               FontSize="12" FontAttributes="Bold"
-                               TextColor="{StaticResource CrimsonTextSecondary}"
-                               CharacterSpacing="2"
+                               Text="VAD / VOICE ACTIVITY DETECTION"
+                               Style="{StaticResource CyberLabelSection}"
+                               Margin="0"
                                VerticalOptions="Center" />
                         <Switch Grid.Column="1"
                                 IsToggled="{Binding VadEnabled, Mode=TwoWay}"
-                                OnColor="{StaticResource CrimsonPrimaryAccent}"
+                                Style="{StaticResource CyberSwitch}"
                                 ThumbColor="White" />
                     </Grid>
 
                     <VerticalStackLayout IsVisible="{Binding VadEnabled}" Spacing="10">
                         <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
                             <Button Grid.Column="0" Text="Remote"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Vad:0"
-                                    BackgroundColor="{Binding VadRemoteButtonColor}"
-                                    TextColor="{Binding VadRemoteButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Vad:0"
+                                     BackgroundColor="{Binding VadRemoteButtonColor}"
+                                     TextColor="{Binding VadRemoteButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                             <Button Grid.Column="1" Text="Local"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Vad:1"
-                                    BackgroundColor="{Binding VadLocalButtonColor}"
-                                    TextColor="{Binding VadLocalButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Vad:1"
+                                     BackgroundColor="{Binding VadLocalButtonColor}"
+                                     TextColor="{Binding VadLocalButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                             <Button Grid.Column="2" Text="Built-In"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Vad:2"
-                                    BackgroundColor="{Binding VadBuiltInButtonColor}"
-                                    TextColor="{Binding VadBuiltInButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Vad:2"
+                                     BackgroundColor="{Binding VadBuiltInButtonColor}"
+                                     TextColor="{Binding VadBuiltInButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                         </Grid>
 
                         <VerticalStackLayout IsVisible="{Binding VadShowRemote}" Spacing="8">
-                            <Label Text="Server URL" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                            <Label Text="Server URL" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding VadRemoteUrl}" Placeholder="http://192.168.1.100:8080"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Model ID" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Model ID" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding VadRemoteModelId}" Placeholder="silero-vad"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="API Key (optional)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding VadRemoteApiKey}" IsPassword="True"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Timeout (seconds)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Timeout (seconds)" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding VadRemoteTimeout}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
+                                   Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding VadShowLocal}" Spacing="8">
-                            <Label Text="Model Path" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                            <Label Text="Model Path" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding VadLocalModelPath}" Placeholder="/storage/emulated/0/Models/silero_vad.onnx"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Server Port" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Server Port" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding VadLocalServerPort}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Additional Parameters" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Additional Parameters" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding VadLocalParameters}"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
+                                   Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding VadShowBuiltIn}" Spacing="8">
                             <Label Text="Using RMS-based local voice activity detection (built-in)"
-                                   TextColor="{StaticResource CrimsonTextSecondary}" FontSize="12"
+                                   Style="{StaticResource CyberLabelMuted}"
                                    LineBreakMode="WordWrap" />
                         </VerticalStackLayout>
                     </VerticalStackLayout>
@@ -322,86 +252,70 @@
             </Border>
 
             <!-- ══ SPEECH-TO-TEXT ═══════════════════════════════════════════════════ -->
-            <Border BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
-                    Stroke="#333333"
-                    StrokeThickness="1"
-                    Padding="16"
-                    StrokeShape="RoundRectangle 8">
+            <Border Style="{StaticResource HudPanel}">
                 <VerticalStackLayout Spacing="12">
 
                     <Grid ColumnDefinitions="*,Auto">
                         <Label Grid.Column="0"
                                Text="SPEECH-TO-TEXT"
-                               FontSize="12" FontAttributes="Bold"
-                               TextColor="{StaticResource CrimsonTextSecondary}"
-                               CharacterSpacing="2"
+                               Style="{StaticResource CyberLabelSection}"
+                               Margin="0"
                                VerticalOptions="Center" />
                         <Switch Grid.Column="1"
                                 IsToggled="{Binding SttEnabled, Mode=TwoWay}"
-                                OnColor="{StaticResource CrimsonPrimaryAccent}"
+                                Style="{StaticResource CyberSwitch}"
                                 ThumbColor="White" />
                     </Grid>
 
                     <VerticalStackLayout IsVisible="{Binding SttEnabled}" Spacing="10">
                         <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
                             <Button Grid.Column="0" Text="Remote"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Stt:0"
-                                    BackgroundColor="{Binding SttRemoteButtonColor}"
-                                    TextColor="{Binding SttRemoteButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Stt:0"
+                                     BackgroundColor="{Binding SttRemoteButtonColor}"
+                                     TextColor="{Binding SttRemoteButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                             <Button Grid.Column="1" Text="Local"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Stt:1"
-                                    BackgroundColor="{Binding SttLocalButtonColor}"
-                                    TextColor="{Binding SttLocalButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Stt:1"
+                                     BackgroundColor="{Binding SttLocalButtonColor}"
+                                     TextColor="{Binding SttLocalButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                             <Button Grid.Column="2" Text="Built-In"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Stt:2"
-                                    BackgroundColor="{Binding SttBuiltInButtonColor}"
-                                    TextColor="{Binding SttBuiltInButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Stt:2"
+                                     BackgroundColor="{Binding SttBuiltInButtonColor}"
+                                     TextColor="{Binding SttBuiltInButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                         </Grid>
 
                         <VerticalStackLayout IsVisible="{Binding SttShowRemote}" Spacing="8">
-                            <Label Text="Server URL" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                            <Label Text="Server URL" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding SttRemoteUrl}" Placeholder="http://192.168.1.100:8080"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Model ID" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Model ID" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding SttRemoteModelId}" Placeholder="whisper-large-v3"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="API Key (optional)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding SttRemoteApiKey}" IsPassword="True"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Timeout (seconds)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Timeout (seconds)" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding SttRemoteTimeout}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
+                                   Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding SttShowLocal}" Spacing="8">
-                            <Label Text="Model Path" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                            <Label Text="Model Path" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding SttLocalModelPath}" Placeholder="/storage/emulated/0/Models/whisper.bin"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Server Port" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Server Port" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding SttLocalServerPort}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Additional Parameters" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Additional Parameters" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding SttLocalParameters}" Placeholder="--threads 4 --beam-size 1"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
+                                   Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding SttShowBuiltIn}" Spacing="8">
                             <Label Text="Using Android built-in speech recognition (SpeechRecognizer API)"
-                                   TextColor="{StaticResource CrimsonTextSecondary}" FontSize="12"
+                                   Style="{StaticResource CyberLabelMuted}"
                                    LineBreakMode="WordWrap" />
                         </VerticalStackLayout>
                     </VerticalStackLayout>
@@ -410,76 +324,60 @@
             </Border>
 
             <!-- ══ LANGUAGE MODEL ═══════════════════════════════════════════════════ -->
-            <Border BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
-                    Stroke="#333333"
-                    StrokeThickness="1"
-                    Padding="16"
-                    StrokeShape="RoundRectangle 8">
+            <Border Style="{StaticResource HudPanel}">
                 <VerticalStackLayout Spacing="12">
 
                     <Grid ColumnDefinitions="*,Auto">
                         <Label Grid.Column="0"
                                Text="LANGUAGE MODEL"
-                               FontSize="12" FontAttributes="Bold"
-                               TextColor="{StaticResource CrimsonTextSecondary}"
-                               CharacterSpacing="2"
+                               Style="{StaticResource CyberLabelSection}"
+                               Margin="0"
                                VerticalOptions="Center" />
                         <Switch Grid.Column="1"
                                 IsToggled="{Binding LlmEnabled, Mode=TwoWay}"
-                                OnColor="{StaticResource CrimsonPrimaryAccent}"
+                                Style="{StaticResource CyberSwitch}"
                                 ThumbColor="White" />
                     </Grid>
 
                     <VerticalStackLayout IsVisible="{Binding LlmEnabled}" Spacing="10">
                         <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
                             <Button Grid.Column="0" Text="Remote"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Llm:0"
-                                    BackgroundColor="{Binding LlmRemoteButtonColor}"
-                                    TextColor="{Binding LlmRemoteButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Llm:0"
+                                     BackgroundColor="{Binding LlmRemoteButtonColor}"
+                                     TextColor="{Binding LlmRemoteButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                             <Button Grid.Column="1" Text="Local"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Llm:1"
-                                    BackgroundColor="{Binding LlmLocalButtonColor}"
-                                    TextColor="{Binding LlmLocalButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Llm:1"
+                                     BackgroundColor="{Binding LlmLocalButtonColor}"
+                                     TextColor="{Binding LlmLocalButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                         </Grid>
 
                         <VerticalStackLayout IsVisible="{Binding LlmShowRemote}" Spacing="8">
-                            <Label Text="Server URL" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                            <Label Text="Server URL" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding LlmRemoteUrl}" Placeholder="http://192.168.1.100:11434"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Model ID" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Model ID" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding LlmRemoteModelId}" Placeholder="llama3.2:3b"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="API Key (optional)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding LlmRemoteApiKey}" IsPassword="True"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Timeout (seconds)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Timeout (seconds)" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding LlmRemoteTimeout}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
+                                   Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding LlmShowLocal}" Spacing="8">
-                            <Label Text="Model Path" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                            <Label Text="Model Path" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding LlmLocalModelPath}" Placeholder="/storage/emulated/0/Models/llama3.gguf"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Server Port" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Server Port" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding LlmLocalServerPort}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Additional Parameters" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Additional Parameters" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding LlmLocalParameters}" Placeholder="--n-gpu-layers 33 --ctx-size 4096"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
+                                   Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
                     </VerticalStackLayout>
 
@@ -487,85 +385,70 @@
             </Border>
 
             <!-- ══ TEXT-TO-SPEECH ═══════════════════════════════════════════════════ -->
-            <Border BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
-                    Stroke="#333333"
-                    StrokeThickness="1"
-                    Padding="16"
-                    StrokeShape="RoundRectangle 8">
+            <Border Style="{StaticResource HudPanel}">
                 <VerticalStackLayout Spacing="12">
 
                     <Grid ColumnDefinitions="*,Auto">
                         <Label Grid.Column="0"
                                Text="TEXT-TO-SPEECH"
-                               FontSize="12" FontAttributes="Bold"
-                               TextColor="{StaticResource CrimsonTextSecondary}"
-                               CharacterSpacing="2"
+                               Style="{StaticResource CyberLabelSection}"
+                               Margin="0"
                                VerticalOptions="Center" />
                         <Switch Grid.Column="1"
                                 IsToggled="{Binding TtsEnabled, Mode=TwoWay}"
-                                OnColor="{StaticResource CrimsonPrimaryAccent}"
+                                Style="{StaticResource CyberSwitch}"
                                 ThumbColor="White" />
                     </Grid>
 
                     <VerticalStackLayout IsVisible="{Binding TtsEnabled}" Spacing="10">
                         <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
                             <Button Grid.Column="0" Text="Remote"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Tts:0"
-                                    BackgroundColor="{Binding TtsRemoteButtonColor}"
-                                    TextColor="{Binding TtsRemoteButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Tts:0"
+                                     BackgroundColor="{Binding TtsRemoteButtonColor}"
+                                     TextColor="{Binding TtsRemoteButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                             <Button Grid.Column="1" Text="Local"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Tts:1"
-                                    BackgroundColor="{Binding TtsLocalButtonColor}"
-                                    TextColor="{Binding TtsLocalButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Tts:1"
+                                     BackgroundColor="{Binding TtsLocalButtonColor}"
+                                     TextColor="{Binding TtsLocalButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                             <Button Grid.Column="2" Text="Built-In"
-                                    Command="{Binding SetStageModeCommand}" CommandParameter="Tts:2"
-                                    BackgroundColor="{Binding TtsBuiltInButtonColor}"
-                                    TextColor="{Binding TtsBuiltInButtonTextColor}"
-                                    CornerRadius="6" HeightRequest="36" FontSize="12" Padding="0" />
+                                     Command="{Binding SetStageModeCommand}" CommandParameter="Tts:2"
+                                     BackgroundColor="{Binding TtsBuiltInButtonColor}"
+                                     TextColor="{Binding TtsBuiltInButtonTextColor}"
+                                     Style="{StaticResource StageModeButton}" />
                         </Grid>
 
                         <VerticalStackLayout IsVisible="{Binding TtsShowRemote}" Spacing="8">
-                            <Label Text="Server URL" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                            <Label Text="Server URL" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding TtsRemoteUrl}" Placeholder="http://192.168.1.100:8080"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Model ID" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Model ID" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding TtsRemoteModelId}" Placeholder="kokoro-v1"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="API Key (optional)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding TtsRemoteApiKey}" IsPassword="True"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Timeout (seconds)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Timeout (seconds)" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding TtsRemoteTimeout}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
+                                   Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding TtsShowLocal}" Spacing="8">
-                            <Label Text="Model Path" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                            <Label Text="Model Path" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding TtsLocalModelPath}" Placeholder="/storage/emulated/0/Models/tts.bin"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}"
-                                   PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
-                            <Label Text="Server Port" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Server Port" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding TtsLocalServerPort}" Keyboard="Numeric"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
-                            <Label Text="Additional Parameters" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
+                                   Style="{StaticResource CyberEntry}" />
+                            <Label Text="Additional Parameters" Style="{StaticResource HudMetricLabel}" />
                             <Entry Text="{Binding TtsLocalParameters}"
-                                   BackgroundColor="{StaticResource CrimsonSurface}"
-                                   TextColor="{StaticResource CrimsonTextPrimary}" />
+                                   Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding TtsShowBuiltIn}" Spacing="8">
                             <Label Text="Using Android TextToSpeech API (built-in on-device)"
-                                   TextColor="{StaticResource CrimsonTextSecondary}" FontSize="12"
+                                   Style="{StaticResource CyberLabelMuted}"
                                    LineBreakMode="WordWrap" />
                         </VerticalStackLayout>
                     </VerticalStackLayout>
@@ -574,53 +457,39 @@
             </Border>
 
             <!-- ══ MCP SERVERS ══════════════════════════════════════════════════════ -->
-            <Border BackgroundColor="{StaticResource CrimsonSurfaceElevated}"
-                    Stroke="#333333"
-                    StrokeThickness="1"
-                    Padding="16"
-                    StrokeShape="RoundRectangle 8">
+            <Border Style="{StaticResource NeonFrame}">
                 <VerticalStackLayout Spacing="12">
 
-                    <Label Text="MCP SERVERS"
-                           FontSize="12" FontAttributes="Bold"
-                           TextColor="{StaticResource CrimsonTextSecondary}"
-                           CharacterSpacing="2" />
+                     <Label Text="MCP SERVERS"
+                            Style="{StaticResource CyberLabelSection}"
+                            Margin="0" />
 
-                    <Label Text="Name" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                    <Entry Text="{Binding McpNameInput}" Placeholder="obsidian-server"
-                           BackgroundColor="{StaticResource CrimsonSurface}"
-                           TextColor="{StaticResource CrimsonTextPrimary}"
-                           PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
+                     <Label Text="Name" Style="{StaticResource HudMetricLabel}" />
+                     <Entry Text="{Binding McpNameInput}" Placeholder="obsidian-server"
+                            Style="{StaticResource CyberEntry}" />
 
-                    <Label Text="Endpoint" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                    <Entry Text="{Binding McpEndpointInput}" Placeholder="http://192.168.1.10:3000/sse"
-                           BackgroundColor="{StaticResource CrimsonSurface}"
-                           TextColor="{StaticResource CrimsonTextPrimary}"
-                           PlaceholderColor="{StaticResource CrimsonTextSecondary}" />
+                     <Label Text="Endpoint" Style="{StaticResource HudMetricLabel}" />
+                     <Entry Text="{Binding McpEndpointInput}" Placeholder="http://192.168.1.10:3000/sse"
+                            Style="{StaticResource CyberEntry}" />
 
-                    <Label Text="API Key (optional)" TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11" />
-                    <Entry Text="{Binding McpApiKeyInput}" IsPassword="True"
-                           BackgroundColor="{StaticResource CrimsonSurface}"
-                           TextColor="{StaticResource CrimsonTextPrimary}" />
+                     <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
+                     <Entry Text="{Binding McpApiKeyInput}" IsPassword="True"
+                            Style="{StaticResource CyberEntry}" />
 
                     <Button Text="ADD MCP SERVER"
                             Command="{Binding AddMcpServerCommand}"
                             Style="{StaticResource GhostButton}" />
 
-                    <Label Text="Configured Servers"
-                           TextColor="{StaticResource CrimsonTextSecondary}" FontSize="11"
-                           Margin="0,4,0,0" />
+                     <Label Text="Configured Servers"
+                            Style="{StaticResource HudMetricLabel}"
+                            Margin="0,4,0,0" />
 
                     <CollectionView ItemsSource="{Binding McpServers}"
                                     HeightRequest="160">
                         <CollectionView.ItemTemplate>
                             <DataTemplate>
-                                <Border BackgroundColor="{StaticResource CrimsonSurface}"
-                                        Stroke="{StaticResource CrimsonGlassBorder}"
-                                        StrokeThickness="1"
-                                        Padding="10"
-                                        Margin="0,4"
-                                        StrokeShape="RoundRectangle 6">
+                                <Border Style="{StaticResource InsetGlassPanel}"
+                                        Margin="0,4">
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                         <VerticalStackLayout Grid.Column="0" Spacing="2">
                                             <Label Text="{Binding Name}"
@@ -648,14 +517,11 @@
             <!-- ══ SAVE ═════════════════════════════════════════════════════════════ -->
             <Button Text="SAVE SETTINGS"
                     Command="{Binding SaveSettingsCommand}"
-                    BackgroundColor="{StaticResource CrimsonPrimaryAccent}"
-                    TextColor="White"
-                    FontAttributes="Bold"
-                    HeightRequest="50"
-                    CornerRadius="8"
+                    Style="{StaticResource CyberButton}"
                     Margin="0,8,0,16" />
 
         </VerticalStackLayout>
-    </ScrollView>
+        </ScrollView>
+    </Grid>
 
 </ContentPage>

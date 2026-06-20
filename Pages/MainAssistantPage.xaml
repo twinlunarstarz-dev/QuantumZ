@@ -78,7 +78,7 @@
                                 Style="{StaticResource CompactGhostButton}" />
                         <Button Grid.Column="2"
                                 Text="CONFIG"
-                                Command="{Binding ToggleConfigCommand}"
+                                Command="{Binding NavigateToSettingsCommand}"
                                 Style="{StaticResource CompactGhostButton}" />
                     </Grid>
                 </VerticalStackLayout>

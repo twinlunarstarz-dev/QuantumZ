@@ -61,6 +61,18 @@ IProviderRouter.SynthesizeAsync returns provider-specific audio bytes or an empt
 
 Non-empty TTS bytes are written to a temporary WAV file in the MAUI cache directory and played with Android MediaPlayer using speech audio attributes. Empty bytes are treated as the built-in TTS self-play path.
 
+## Native On-Device Runtime Packaging
+
+Android 10+ does not provide a release-safe path for executing downloaded CLI binaries from app-writable storage. QuantumZ local on-device AI therefore requires packaged Android shared libraries in the APK/AAB rather than downloaded executables such as llama-server, whisper command-line tools, or Piper CLI binaries.
+
+QuantumZ calls stable app-owned wrapper libraries instead of raw upstream shared-library names so managed code can depend on a small flat C ABI while upstream projects evolve:
+
+- libquantumz_llama.so, loaded as quantumz_llama, for local LLM init/load/infer/free wrapper operations.
+- libquantumz_whisper.so, loaded as quantumz_whisper, for local STT init/load/transcribe/free wrapper operations.
+- libquantumz_piper.so, loaded as quantumz_piper, for optional local TTS init/load/synthesize/free wrapper operations.
+
+Local setup blocks completion when required LLM or STT model files exist without their corresponding packaged QuantumZ wrapper runtime. VAD can use the built-in RMS fallback or ONNX Runtime path, and TTS can use Android built-in TextToSpeech, so Piper remains optional unless local Piper is selected.
+
 ## AI and MCP Integration
 
 AIIntegrationService resolves the system prompt from the incoming AiRequest first, then VoiceAssistantSettings.SystemPrompt. It discovers MCP tools once per assistant request and carries the resolved system prompt and available tool list through the LLM tool-call loop.

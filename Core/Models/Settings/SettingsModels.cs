@@ -64,7 +64,7 @@ public record GlobalAssistantSettings(
     string? CustomSystemMessage = null,
     bool UseLocalLlm = false,
     bool UseOnDeviceStt = false,
-    bool UseLocalTts = true,
+    bool UseLocalTts = false,
     List<string>? WakeWords = null
 )
 {
@@ -105,6 +105,12 @@ public sealed record StageSettings
 /// <summary>Complete pipeline configuration with one StageSettings per capability.</summary>
 public sealed record PipelineSettings
 {
+    /// <summary>
+    /// Legacy wake-word model-stage settings retained only so older settings JSON containing
+    /// a WakeWord object can still deserialize safely. The release trigger phrase is configured
+    /// by <see cref="VoiceAssistantSettings.TriggerPhrase"/>; voice activity detection is
+    /// configured by <see cref="Vad"/>.
+    /// </summary>
     public StageSettings WakeWord { get; init; } = new();
     public StageSettings Vad { get; init; } = new();
     public StageSettings Stt { get; init; } = new();
@@ -125,4 +131,21 @@ public sealed record VoiceAssistantSettings
     public float WakeWordThreshold { get; init; } = 0.85f;
     public AudioOutputMode AudioOutput { get; init; } = AudioOutputMode.Auto;
     public int MaxToolCallIterations { get; init; } = 6;
+}
+
+/// <summary>Tracks the first-run setup path selected by the user.</summary>
+public enum SetupMode { Unset, Remote, OnDevice }
+
+/// <summary>Persistent first-run setup completion and selected asset state.</summary>
+public sealed record SetupSettings
+{
+    public bool IsCompleted { get; init; } = false;
+    public SetupMode Mode { get; init; } = SetupMode.Unset;
+    public DateTimeOffset? CompletedAtUtc { get; init; }
+    public string? SelectedLlmModelId { get; init; }
+    public string? SelectedSttModelId { get; init; }
+    public string? SelectedVadModelId { get; init; }
+    public string? SelectedTtsModelId { get; init; }
+    public bool LocalAssetsVerified { get; init; }
+    public string? LastSetupError { get; init; }
 }

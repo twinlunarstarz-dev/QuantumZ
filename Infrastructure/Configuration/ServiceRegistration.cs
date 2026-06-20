@@ -16,6 +16,9 @@ public static class ServiceRegistration
         services.AddHttpClient<IFluxAssetService, FluxAssetService>();
         services.AddSingleton<ILocalBinaryManager, LocalBinaryManager>();
         services.AddSingleton<ILlamaLocalManager, LlamaLocalManager>();
+        services.AddSingleton<INativeRuntimeService, NativeRuntimeService>();
+        services.AddSingleton<ModelCatalogService>();
+        services.AddSingleton<ILocalSetupService, LocalSetupService>();
         services.AddHttpClient<IModelRegistry, ModelRegistry>();
         services.AddHttpClient<LlamaAIClient>();
         services.AddTransient<IAIClient>(sp => sp.GetRequiredService<LlamaAIClient>());
