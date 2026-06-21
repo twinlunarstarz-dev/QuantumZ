@@ -48,6 +48,15 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
     private double _maxToolCallIterations = 6;
     public double MaxToolCallIterations { get => _maxToolCallIterations; set => SetProperty(ref _maxToolCallIterations, value); }
 
+    private bool _useOnDeviceStt = false;
+    public bool UseOnDeviceStt { get => _useOnDeviceStt; set => SetProperty(ref _useOnDeviceStt, value); }
+
+    private bool _useLocalTts = false;
+    public bool UseLocalTts { get => _useLocalTts; set => SetProperty(ref _useLocalTts, value); }
+
+    private string _whisperModelPath = string.Empty;
+    public string WhisperModelPath { get => _whisperModelPath; set => SetProperty(ref _whisperModelPath, value); }
+
     // ── VAD Stage ────────────────────────────────────────────────────────────
 
     private bool _vadEnabled = true;
@@ -294,7 +303,6 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
     {
         try
         {
-            var pipeline = _settingsService.PipelineSettings;
             var voice = _settingsService.VoiceAssistantSettings;
 
             TriggerPhrase = voice.TriggerPhrase;
@@ -304,46 +312,70 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
             TriggerGateSensitivity = voice.WakeWordThreshold;
             SelectedAudioOutput = (int)voice.AudioOutput;
             MaxToolCallIterations = voice.MaxToolCallIterations;
+            UseOnDeviceStt = _settingsService.UseOnDeviceStt;
+            UseLocalTts = _settingsService.UseLocalTts;
+            WhisperModelPath = _settingsService.WhisperModelPath;
 
-            VadEnabled = pipeline.Vad.Enabled;
-            VadMode = (int)pipeline.Vad.Mode;
-            VadRemoteUrl = pipeline.Vad.Remote?.Url ?? string.Empty;
-            VadRemoteApiKey = pipeline.Vad.Remote?.ApiKey ?? string.Empty;
-            VadRemoteModelId = pipeline.Vad.Remote?.ModelId ?? string.Empty;
-            VadRemoteTimeout = pipeline.Vad.Remote?.TimeoutSeconds ?? 30;
-            VadLocalModelPath = pipeline.Vad.Local?.ModelPath ?? string.Empty;
-            VadLocalServerPort = pipeline.Vad.Local?.ServerPort ?? 8025;
-            VadLocalParameters = pipeline.Vad.Local?.AdditionalParameters ?? string.Empty;
+            var vadActive = _settingsService.GetActiveProvider("VAD");
+            VadEnabled = true; // Default to enabled if provider exists
+            // Map active provider back to mode: 0=Remote, 1=Local, 2=BuiltIn
+            if (vadActive == null) { VadMode = 2; }
+            else if (vadActive.Url == string.Empty && vadActive.ModelId?.Contains("built-in") == true) { VadMode = 2; }
+            else if (!string.IsNullOrWhiteSpace(vadActive.Url) && vadActive.Url.StartsWith("http")) { VadMode = 0; }
+            else { VadMode = 1; }
 
-            SttEnabled = pipeline.Stt.Enabled;
-            SttMode = (int)pipeline.Stt.Mode;
-            SttRemoteUrl = pipeline.Stt.Remote?.Url ?? string.Empty;
-            SttRemoteApiKey = pipeline.Stt.Remote?.ApiKey ?? string.Empty;
-            SttRemoteModelId = pipeline.Stt.Remote?.ModelId ?? string.Empty;
-            SttRemoteTimeout = pipeline.Stt.Remote?.TimeoutSeconds ?? 30;
-            SttLocalModelPath = pipeline.Stt.Local?.ModelPath ?? string.Empty;
-            SttLocalServerPort = pipeline.Stt.Local?.ServerPort ?? 8025;
-            SttLocalParameters = pipeline.Stt.Local?.AdditionalParameters ?? string.Empty;
+            VadRemoteUrl = vadActive?.Url ?? string.Empty;
+            VadRemoteApiKey = vadActive?.Parameters.GetValueOrDefault("api_key") ?? string.Empty;
+            VadRemoteModelId = vadActive?.ModelId ?? string.Empty;
+            VadRemoteTimeout = 30; // Default as not stored in ProviderConfig explicitly
+            VadLocalModelPath = vadActive?.Url ?? string.Empty;
+            VadLocalServerPort = 8025;
+            VadLocalParameters = vadActive?.Parameters.GetValueOrDefault("additional_params") ?? string.Empty;
 
-            LlmEnabled = pipeline.Llm.Enabled;
-            LlmMode = (int)pipeline.Llm.Mode;
-            LlmRemoteUrl = pipeline.Llm.Remote?.Url ?? string.Empty;
-            LlmRemoteApiKey = pipeline.Llm.Remote?.ApiKey ?? string.Empty;
-            LlmRemoteModelId = pipeline.Llm.Remote?.ModelId ?? string.Empty;
-            LlmRemoteTimeout = pipeline.Llm.Remote?.TimeoutSeconds ?? 30;
-            LlmLocalModelPath = pipeline.Llm.Local?.ModelPath ?? string.Empty;
-            LlmLocalServerPort = pipeline.Llm.Local?.ServerPort ?? 8025;
-            LlmLocalParameters = pipeline.Llm.Local?.AdditionalParameters ?? string.Empty;
+            var sttActive = _settingsService.GetActiveProvider("STT");
+            SttEnabled = true;
+            if (sttActive == null) { SttMode = 2; }
+            else if (sttActive.Url == string.Empty && sttActive.ModelId?.Contains("built-in") == true) { SttMode = 2; }
+            else if (!string.IsNullOrWhiteSpace(sttActive.Url) && sttActive.Url.StartsWith("http")) { SttMode = 0; }
+            else { SttMode = 1; }
 
-            TtsEnabled = pipeline.Tts.Enabled;
-            TtsMode = (int)pipeline.Tts.Mode;
-            TtsRemoteUrl = pipeline.Tts.Remote?.Url ?? string.Empty;
-            TtsRemoteApiKey = pipeline.Tts.Remote?.ApiKey ?? string.Empty;
-            TtsRemoteModelId = pipeline.Tts.Remote?.ModelId ?? string.Empty;
-            TtsRemoteTimeout = pipeline.Tts.Remote?.TimeoutSeconds ?? 30;
-            TtsLocalModelPath = pipeline.Tts.Local?.ModelPath ?? string.Empty;
-            TtsLocalServerPort = pipeline.Tts.Local?.ServerPort ?? 8025;
-            TtsLocalParameters = pipeline.Tts.Local?.AdditionalParameters ?? string.Empty;
+            SttRemoteUrl = sttActive?.Url ?? string.Empty;
+            SttRemoteApiKey = sttActive?.Parameters.GetValueOrDefault("api_key") ?? string.Empty;
+            SttRemoteModelId = sttActive?.ModelId ?? string.Empty;
+            SttRemoteTimeout = 30;
+            SttLocalModelPath = sttActive?.Url ?? string.Empty;
+            SttLocalServerPort = 8025;
+            SttLocalParameters = sttActive?.Parameters.GetValueOrDefault("additional_params") ?? string.Empty;
+
+            var llmActive = _settingsService.GetActiveProvider("LLM");
+            LlmEnabled = true;
+            if (llmActive == null) { LlmMode = 2; }
+            else if (llmActive.Url == string.Empty && llmActive.ModelId?.Contains("built-in") == true) { LlmMode = 2; }
+            else if (!string.IsNullOrWhiteSpace(llmActive.Url) && llmActive.Url.StartsWith("http")) { LlmMode = 0; }
+            else { LlmMode = 1; }
+
+            LlmRemoteUrl = llmActive?.Url ?? string.Empty;
+            LlmRemoteApiKey = llmActive?.Parameters.GetValueOrDefault("api_key") ?? string.Empty;
+            LlmRemoteModelId = llmActive?.ModelId ?? string.Empty;
+            LlmRemoteTimeout = 30;
+            LlmLocalModelPath = llmActive?.Url ?? string.Empty;
+            LlmLocalServerPort = 8025;
+            LlmLocalParameters = llmActive?.Parameters.GetValueOrDefault("additional_params") ?? string.Empty;
+
+            var ttsActive = _settingsService.GetActiveProvider("TTS");
+            TtsEnabled = true;
+            if (ttsActive == null) { TtsMode = 2; }
+            else if (ttsActive.Url == string.Empty && ttsActive.ModelId?.Contains("built-in") == true) { TtsMode = 2; }
+            else if (!string.IsNullOrWhiteSpace(ttsActive.Url) && ttsActive.Url.StartsWith("http")) { TtsMode = 0; }
+            else { TtsMode = 1; }
+
+            TtsRemoteUrl = ttsActive?.Url ?? string.Empty;
+            TtsRemoteApiKey = ttsActive?.Parameters.GetValueOrDefault("api_key") ?? string.Empty;
+            TtsRemoteModelId = ttsActive?.ModelId ?? string.Empty;
+            TtsRemoteTimeout = 30;
+            TtsLocalModelPath = ttsActive?.Url ?? string.Empty;
+            TtsLocalServerPort = 8025;
+            TtsLocalParameters = ttsActive?.Parameters.GetValueOrDefault("additional_params") ?? string.Empty;
 
             McpServers.Clear();
             foreach (var srv in _settingsService.McpServers)
@@ -373,15 +405,16 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
                 MaxToolCallIterations = (int)MaxToolCallIterations,
             };
 
-            _settingsService.PipelineSettings = new PipelineSettings
-            {
-                Vad = BuildStage(VadEnabled, VadMode, VadRemoteUrl, VadRemoteApiKey, VadRemoteModelId, VadRemoteTimeout, VadLocalModelPath, VadLocalServerPort, VadLocalParameters),
-                Stt = BuildStage(SttEnabled, SttMode, SttRemoteUrl, SttRemoteApiKey, SttRemoteModelId, SttRemoteTimeout, SttLocalModelPath, SttLocalServerPort, SttLocalParameters),
-                Llm = BuildStage(LlmEnabled, LlmMode, LlmRemoteUrl, LlmRemoteApiKey, LlmRemoteModelId, LlmRemoteTimeout, LlmLocalModelPath, LlmLocalServerPort, LlmLocalParameters),
-                Tts = BuildStage(TtsEnabled, TtsMode, TtsRemoteUrl, TtsRemoteApiKey, TtsRemoteModelId, TtsRemoteTimeout, TtsLocalModelPath, TtsLocalServerPort, TtsLocalParameters),
-            };
+            _settingsService.UseOnDeviceStt = UseOnDeviceStt;
+            _settingsService.UseLocalTts = UseLocalTts;
+            _settingsService.WhisperModelPath = WhisperModelPath;
 
-            _settingsService.McpServers = [.. McpServers];
+            _settingsService.VadSettings = BuildProviderSettings("VAD", VadEnabled, VadMode, VadRemoteUrl, VadRemoteApiKey, VadRemoteModelId, VadLocalModelPath, VadLocalParameters);
+           _settingsService.SttSettings = BuildProviderSettings("STT", SttEnabled, SttMode, SttRemoteUrl, SttRemoteApiKey, SttRemoteModelId, SttLocalModelPath, SttLocalParameters);
+           _settingsService.LlmSettings = BuildProviderSettings("LLM", LlmEnabled, LlmMode, LlmRemoteUrl, LlmRemoteApiKey, LlmRemoteModelId, LlmLocalModelPath, LlmLocalParameters);
+           _settingsService.TtsSettings = BuildProviderSettings("TTS", TtsEnabled, TtsMode, TtsRemoteUrl, TtsRemoteApiKey, TtsRemoteModelId, TtsLocalModelPath, TtsLocalParameters);
+
+           _settingsService.McpServers = [.. McpServers];
 
             StatusMessage = "Settings saved.";
             _logger.Log("SettingsViewModel", "Settings saved.", LogLevel.Info);
@@ -395,28 +428,23 @@ public sealed partial class SettingsViewModel(ISettingsService settingsService, 
         }
     }
 
-    /// <summary>Constructs a <see cref="StageSettings"/> record from flat ViewModel properties.</summary>
-    private static StageSettings BuildStage(
-        bool enabled, int mode,
-        string url, string apiKey, string modelId, int timeout,
-        string localPath, int localPort, string localParams) => new()
+    /// <summary>Constructs a <see cref="ServiceProviderSettings"/> from flat ViewModel properties.</summary>
+    private static ServiceProviderSettings BuildProviderSettings(
+        string serviceName, bool enabled, int mode,
+        string url, string apiKey, string modelId,
+        string localPath, string localParams)
     {
-        Enabled = enabled,
-        Mode = (ModelMode)mode,
-        Remote = mode == 0 ? new RemoteEndpointConfig
-        {
-            Url = url,
-            ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-            ModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId,
-            TimeoutSeconds = timeout,
-        } : null,
-        Local = mode == 1 ? new LocalModelConfig
-        {
-            ModelPath = localPath,
-            ServerPort = localPort,
-            AdditionalParameters = string.IsNullOrWhiteSpace(localParams) ? null : localParams,
-        } : null,
-    };
+        var providerName = $"{serviceName}-Primary";
+        var config = new ProviderConfig(providerName,
+            mode == 0 ? url : (mode == 1 ? localPath : string.Empty),
+            modelId);
+
+        var parameters = new Dictionary<string, string>();
+        if (!string.IsNullOrWhiteSpace(apiKey)) parameters["api_key"] = apiKey;
+        if (!string.IsNullOrWhiteSpace(localParams)) parameters["additional_params"] = localParams;
+
+        return new ServiceProviderSettings(providerName, [config with { Parameters = parameters }]);
+    }
 
     /// <summary>Parses "StageName:modeIndex" from button CommandParameter and updates the appropriate mode property.</summary>
     private void SetStageMode(string? param)

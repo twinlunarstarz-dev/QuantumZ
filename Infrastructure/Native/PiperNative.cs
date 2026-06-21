@@ -2,6 +2,12 @@ using System.Runtime.InteropServices;
 
 namespace QuantumZ.Infrastructure.Native;
 
+/// <summary>
+/// Piper TTS native wrapper. NOT SHIPPED in v1.
+/// libquantumz_piper.so is not packaged for any Android ABI.
+/// Android TTS is the on-device voice fallback for v1.
+/// This file is retained for future reference but all entry points are unreachable.
+/// </summary>
 internal static partial class PiperNative
 {
     private const string LibraryName = "quantumz_piper";

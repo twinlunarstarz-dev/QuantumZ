@@ -88,19 +88,12 @@ public sealed class SetupViewModel(ISettingsService settingsService, ILocalSetup
         {
             var apiKey = string.IsNullOrWhiteSpace(RemoteApiKey) ? null : RemoteApiKey.Trim();
             var llmModelId = string.IsNullOrWhiteSpace(RemoteModelId) ? null : RemoteModelId.Trim();
-            var currentPipeline = settingsService.PipelineSettings;
 
             settingsService.LlmSettings = BuildProviderSettings(endpoint, apiKey, llmModelId);
             settingsService.SttSettings = BuildProviderSettings(endpoint, apiKey, settingsService.GetActiveProvider("STT")?.ModelId);
             settingsService.TtsSettings = BuildProviderSettings(endpoint, apiKey, settingsService.GetActiveProvider("TTS")?.ModelId);
             settingsService.UseOnDeviceStt = false;
             settingsService.UseLocalTts = false;
-            settingsService.PipelineSettings = currentPipeline with
-            {
-                Llm = BuildRemoteStage(endpoint, apiKey, llmModelId),
-                Stt = BuildRemoteStage(endpoint, apiKey, settingsService.GetActiveProvider("STT")?.ModelId),
-                Tts = BuildRemoteStage(endpoint, apiKey, settingsService.GetActiveProvider("TTS")?.ModelId),
-            };
             settingsService.SetupSettings = new SetupSettings
             {
                 IsCompleted = true,
@@ -264,15 +257,9 @@ public sealed class SetupViewModel(ISettingsService settingsService, ILocalSetup
 
     private void EnsureBuiltInLocalFallbacksSelected()
     {
-        var pipeline = settingsService.PipelineSettings;
         settingsService.VadSettings = BuildFallbackProviderSettings("Built-In RMS VAD", "rms-vad-built-in");
         settingsService.TtsSettings = BuildFallbackProviderSettings("Android Built-In TTS", "builtin.android-tts");
         settingsService.UseLocalTts = false;
-        settingsService.PipelineSettings = pipeline with
-        {
-            Vad = new StageSettings { Enabled = true, Mode = ModelMode.BuiltIn },
-            Tts = new StageSettings { Enabled = true, Mode = ModelMode.BuiltIn }
-        };
     }
 
     private void UpdateChecklistItem(string itemId, Func<SetupChecklistItem, SetupChecklistItem> update)
@@ -313,18 +300,6 @@ public sealed class SetupViewModel(ISettingsService settingsService, ILocalSetup
         ActiveProviderName: providerName,
         Providers: [new ProviderConfig(providerName, string.Empty, modelId)]);
 
-    private static StageSettings BuildRemoteStage(string endpoint, string? apiKey, string? modelId) => new()
-    {
-        Enabled = true,
-        Mode = ModelMode.Remote,
-        Remote = new RemoteEndpointConfig
-        {
-            Url = endpoint,
-            ApiKey = apiKey,
-            ModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId,
-            TimeoutSeconds = 30,
-        },
-    };
 
     private static Dictionary<string, string> BuildParameters(string? apiKey) =>
         string.IsNullOrWhiteSpace(apiKey) ? [] : new Dictionary<string, string> { ["ApiKey"] = apiKey };

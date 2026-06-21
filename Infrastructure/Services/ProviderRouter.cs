@@ -187,6 +187,14 @@ public sealed class ProviderRouter(
                 .ThenBy(provider => provider.Descriptor.DisplayName, StringComparer.OrdinalIgnoreCase)];
         }
 
+        if (capability == ProviderCapability.Llm)
+        {
+            return [.. providerList
+                .OrderBy(provider => IsSelectedLlmLocation(provider) ? -1 : GetLocationRank(provider.Descriptor.Capability, provider.Descriptor.Location))
+                .ThenBy(provider => provider.Descriptor.Priority)
+                .ThenBy(provider => provider.Descriptor.DisplayName, StringComparer.OrdinalIgnoreCase)];
+        }
+
         if (capability != ProviderCapability.Tts)
             return SortProviders(providerList);
 
@@ -197,17 +205,31 @@ public sealed class ProviderRouter(
             .ThenBy(provider => provider.Descriptor.DisplayName, StringComparer.OrdinalIgnoreCase)];
     }
 
-    private static bool IsSelectedTtsLocation<TProvider>(TProvider provider, ModelProfile? selectedModel)
-        where TProvider : IProvider =>
-        selectedModel is not null
-        && provider.Descriptor.Capability == ProviderCapability.Tts
-        && provider.Descriptor.Location == selectedModel.Location;
+    private bool IsSelectedTtsLocation<TProvider>(TProvider provider, ModelProfile? selectedModel)
+        where TProvider : IProvider
+    {
+        if (provider.Descriptor.Capability != ProviderCapability.Tts)
+            return false;
+
+        // If UseLocalTts is enabled, prefer BuiltIn or Local providers
+        if (settings.UseLocalTts)
+            return provider.Descriptor.Location is ProviderLocation.BuiltIn or ProviderLocation.Local;
+
+        // Otherwise, use the model registry selection
+        return selectedModel is not null && provider.Descriptor.Location == selectedModel.Location;
+    }
 
     private bool IsSelectedSttLocation<TProvider>(TProvider provider)
         where TProvider : IProvider =>
         provider.Descriptor.Capability == ProviderCapability.Stt
         && ((settings.UseOnDeviceStt && provider.Descriptor.Location == ProviderLocation.Local)
             || (!settings.UseOnDeviceStt && provider.Descriptor.Location == ProviderLocation.Remote));
+
+    private bool IsSelectedLlmLocation<TProvider>(TProvider provider)
+        where TProvider : IProvider =>
+        provider.Descriptor.Capability == ProviderCapability.Llm
+        && ((settings.UseLocalLlm && provider.Descriptor.Location is ProviderLocation.Local or ProviderLocation.Hybrid)
+            || (!settings.UseLocalLlm && provider.Descriptor.Location is ProviderLocation.Remote or ProviderLocation.Hybrid));
 
     private static int GetLocationRank(ProviderCapability capability, ProviderLocation location)
     {

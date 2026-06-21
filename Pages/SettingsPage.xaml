@@ -58,7 +58,7 @@
         <VerticalStackLayout Padding="16" Spacing="16">
 
             <Border Style="{StaticResource HudPanel}">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                     <VerticalStackLayout Grid.Column="0" Spacing="3">
                         <Label Text="SYSTEM CONFIG"
                                TextColor="{StaticResource CrimsonTextPrimary}"
@@ -66,9 +66,10 @@
                                FontAttributes="Bold"
                                CharacterSpacing="1.1" />
                         <Label Text="PROVIDER ROUTING // MODELS // MCP FABRIC"
-                               Style="{StaticResource CyberLabelMuted}"
-                               FontSize="10"
-                               CharacterSpacing="1.2" />
+                                Style="{StaticResource CyberLabelMuted}"
+                                FontSize="10"
+                                CharacterSpacing="1.2"
+                                LineBreakMode="WordWrap" />
                     </VerticalStackLayout>
 
                     <Border Grid.Column="1"
@@ -86,10 +87,11 @@
             <!-- Status Message -->
             <Border IsVisible="{Binding StatusMessage, Converter={StaticResource StringNotEmptyConverter}}"
                     Style="{StaticResource StatusPill}">
-                <Label Text="{Binding StatusMessage}"
-                       TextColor="{StaticResource CrimsonTextPrimary}"
-                       FontSize="13"
-                       HorizontalOptions="Center" />
+                        <Label Text="{Binding StatusMessage}"
+                        TextColor="{StaticResource CrimsonTextPrimary}"
+                        FontSize="13"
+                       HorizontalOptions="Center"
+                       LineBreakMode="WordWrap" />
             </Border>
 
             <!-- ══ GLOBAL SETTINGS ══════════════════════════════════════════════════ -->
@@ -100,26 +102,32 @@
                             Style="{StaticResource CyberLabelSection}"
                             Margin="0" />
 
-                     <Label Text="Trigger Phrase"
-                            Style="{StaticResource HudMetricLabel}" />
-                     <Entry Text="{Binding TriggerPhrase}"
-                            Placeholder="hey quantum"
-                            Style="{StaticResource CyberEntry}" />
+                         <Label Text="Trigger Phrase"
+                             Style="{StaticResource HudMetricLabel}" />
+                      <Entry Text="{Binding TriggerPhrase}"
+                             Placeholder="hey quantum"
+                             SemanticProperties.Description="Trigger phrase"
+                             SemanticProperties.Hint="Voice phrase used to activate QuantumZ."
+                             Style="{StaticResource CyberEntry}" />
 
                      <Label Text="System Prompt"
                             Style="{StaticResource HudMetricLabel}" />
-                     <Editor Text="{Binding SystemPrompt}"
-                             HeightRequest="100"
-                             Placeholder="You are QuantumZ, a helpful AI voice assistant..."
-                             Style="{StaticResource CyberEditor}" />
+                      <Editor Text="{Binding SystemPrompt}"
+                              MinimumHeightRequest="100"
+                              Placeholder="You are QuantumZ, a helpful AI voice assistant..."
+                              SemanticProperties.Description="System prompt"
+                              SemanticProperties.Hint="Instructions that define how the assistant should respond."
+                              Style="{StaticResource CyberEditor}" />
 
                      <Label Text="Pre-roll Buffer"
                             Style="{StaticResource HudMetricLabel}" />
                      <Grid ColumnDefinitions="*,50">
-                         <Slider Grid.Column="0"
-                                 Minimum="2" Maximum="15"
-                                 Value="{Binding PreRollSeconds, Mode=TwoWay}"
-                                 Style="{StaticResource CyberSlider}" />
+                          <Slider Grid.Column="0"
+                                  Minimum="2" Maximum="15"
+                                  Value="{Binding PreRollSeconds, Mode=TwoWay}"
+                                  SemanticProperties.Description="Pre-roll buffer"
+                                  SemanticProperties.Hint="Adjusts how many seconds of audio are buffered before speech is detected."
+                                  Style="{StaticResource CyberSlider}" />
                         <Label Grid.Column="1"
                                Text="{Binding PreRollSeconds, StringFormat='{0:F1}s'}"
                                TextColor="{StaticResource CrimsonTextPrimary}"
@@ -130,10 +138,12 @@
                      <Label Text="Post-silence Timeout"
                             Style="{StaticResource HudMetricLabel}" />
                      <Grid ColumnDefinitions="*,50">
-                         <Slider Grid.Column="0"
-                                 Minimum="0.5" Maximum="3.0"
-                                 Value="{Binding PostSilenceSeconds, Mode=TwoWay}"
-                                 Style="{StaticResource CyberSlider}" />
+                          <Slider Grid.Column="0"
+                                  Minimum="0.5" Maximum="3.0"
+                                  Value="{Binding PostSilenceSeconds, Mode=TwoWay}"
+                                  SemanticProperties.Description="Post-silence timeout"
+                                  SemanticProperties.Hint="Adjusts how long QuantumZ waits after silence before processing speech."
+                                  Style="{StaticResource CyberSlider}" />
                         <Label Grid.Column="1"
                                Text="{Binding PostSilenceSeconds, StringFormat='{0:F1}s'}"
                                TextColor="{StaticResource CrimsonTextPrimary}"
@@ -144,10 +154,12 @@
                      <Label Text="Trigger Gate Sensitivity"
                              Style="{StaticResource HudMetricLabel}" />
                      <Grid ColumnDefinitions="*,50">
-                         <Slider Grid.Column="0"
-                                 Minimum="0.5" Maximum="1.0"
-                                 Value="{Binding TriggerGateSensitivity, Mode=TwoWay}"
-                                 Style="{StaticResource CyberSlider}" />
+                          <Slider Grid.Column="0"
+                                  Minimum="0.5" Maximum="1.0"
+                                  Value="{Binding TriggerGateSensitivity, Mode=TwoWay}"
+                                  SemanticProperties.Description="Trigger gate sensitivity"
+                                  SemanticProperties.Hint="Adjusts the wake phrase confidence threshold."
+                                  Style="{StaticResource CyberSlider}" />
                         <Label Grid.Column="1"
                                Text="{Binding TriggerGateSensitivity, StringFormat='{0:F2}'}"
                                TextColor="{StaticResource CrimsonTextPrimary}"
@@ -156,19 +168,24 @@
                      </Grid>
 
                      <Label Text="Audio Output"
-                            Style="{StaticResource HudMetricLabel}" />
+                             Style="{StaticResource HudMetricLabel}" />
                     <Picker ItemsSource="{StaticResource AudioOutputItems}"
-                            SelectedIndex="{Binding SelectedAudioOutput, Mode=TwoWay}"
-                            Style="{StaticResource CyberPicker}" />
+                             SelectedIndex="{Binding SelectedAudioOutput, Mode=TwoWay}"
+                             SemanticProperties.Description="Audio output"
+                             SemanticProperties.Hint="Selects where assistant speech audio should play."
+                             Style="{StaticResource CyberPicker}" />
 
-                    <Grid ColumnDefinitions="*,Auto,44">
-                         <Label Grid.Column="0"
-                                Text="Max AI Tool Iterations"
-                                Style="{StaticResource HudMetricLabel}"
-                                VerticalOptions="Center" />
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                          <Label Grid.Column="0"
+                                 Text="Max AI Tool Iterations"
+                                 Style="{StaticResource HudMetricLabel}"
+                                 LineBreakMode="WordWrap"
+                                 VerticalOptions="Center" />
                         <Stepper Grid.Column="1"
-                                 Minimum="1" Maximum="10" Increment="1"
-                                 Value="{Binding MaxToolCallIterations, Mode=TwoWay}" />
+                                  Minimum="1" Maximum="10" Increment="1"
+                                  SemanticProperties.Description="Maximum AI tool iterations"
+                                  SemanticProperties.Hint="Sets the maximum number of tool-use rounds allowed during one assistant response."
+                                  Value="{Binding MaxToolCallIterations, Mode=TwoWay}" />
                         <Label Grid.Column="2"
                                Text="{Binding MaxToolCallIterations, StringFormat='{0:F0}'}"
                                TextColor="{StaticResource CrimsonTextPrimary}"
@@ -183,62 +200,87 @@
             <Border Style="{StaticResource HudPanel}">
                 <VerticalStackLayout Spacing="12">
 
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                         <Label Grid.Column="0"
                                Text="VAD / VOICE ACTIVITY DETECTION"
                                Style="{StaticResource CyberLabelSection}"
                                Margin="0"
                                VerticalOptions="Center" />
-                        <Switch Grid.Column="1"
-                                IsToggled="{Binding VadEnabled, Mode=TwoWay}"
-                                Style="{StaticResource CyberSwitch}"
-                                ThumbColor="White" />
+                         <Switch Grid.Column="1"
+                                 IsToggled="{Binding VadEnabled, Mode=TwoWay}"
+                                 SemanticProperties.Description="Voice activity detection enabled"
+                                 SemanticProperties.Hint="Turns voice activity detection on or off."
+                                 Style="{StaticResource CyberSwitch}"
+                                 ThumbColor="White" />
                     </Grid>
 
                     <VerticalStackLayout IsVisible="{Binding VadEnabled}" Spacing="10">
-                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
-                            <Button Grid.Column="0" Text="Remote"
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" RowSpacing="8" ColumnSpacing="8">
+                            <Button Grid.Row="0" Grid.Column="0" Text="Remote"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Vad:0"
                                      BackgroundColor="{Binding VadRemoteButtonColor}"
                                      TextColor="{Binding VadRemoteButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use remote voice activity detection"
+                                     SemanticProperties.Hint="Routes voice activity detection to a remote provider."
                                      Style="{StaticResource StageModeButton}" />
-                            <Button Grid.Column="1" Text="Local"
+                            <Button Grid.Row="0" Grid.Column="1" Text="Local"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Vad:1"
                                      BackgroundColor="{Binding VadLocalButtonColor}"
                                      TextColor="{Binding VadLocalButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use local voice activity detection"
+                                     SemanticProperties.Hint="Routes voice activity detection to a local provider."
                                      Style="{StaticResource StageModeButton}" />
-                            <Button Grid.Column="2" Text="Built-In"
+                            <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Text="Built-In"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Vad:2"
                                      BackgroundColor="{Binding VadBuiltInButtonColor}"
                                      TextColor="{Binding VadBuiltInButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use built-in voice activity detection"
+                                     SemanticProperties.Hint="Routes voice activity detection to the built-in RMS provider."
                                      Style="{StaticResource StageModeButton}" />
                         </Grid>
 
                         <VerticalStackLayout IsVisible="{Binding VadShowRemote}" Spacing="8">
                             <Label Text="Server URL" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding VadRemoteUrl}" Placeholder="http://192.168.1.100:8080"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding VadRemoteUrl}" Placeholder="http://192.168.1.100:8080"
+                                    SemanticProperties.Description="Voice activity detection remote server URL"
+                                    SemanticProperties.Hint="Remote server address for voice activity detection."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Model ID" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding VadRemoteModelId}" Placeholder="silero-vad"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding VadRemoteModelId}" Placeholder="silero-vad"
+                                    SemanticProperties.Description="Voice activity detection remote model ID"
+                                    SemanticProperties.Hint="Model identifier for the remote voice activity detection provider."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding VadRemoteApiKey}" IsPassword="True"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding VadRemoteApiKey}" IsPassword="True"
+                                    SemanticProperties.Description="Voice activity detection remote API key"
+                                    SemanticProperties.Hint="Optional API key for the remote voice activity detection provider."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Timeout (seconds)" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding VadRemoteTimeout}" Keyboard="Numeric"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding VadRemoteTimeout}" Keyboard="Numeric"
+                                    SemanticProperties.Description="Voice activity detection remote timeout"
+                                    SemanticProperties.Hint="Timeout in seconds for remote voice activity detection requests."
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding VadShowLocal}" Spacing="8">
                             <Label Text="Model Path" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding VadLocalModelPath}" Placeholder="/storage/emulated/0/Models/silero_vad.onnx"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding VadLocalModelPath}" Placeholder="/storage/emulated/0/Models/silero_vad.onnx"
+                                    SemanticProperties.Description="Voice activity detection local model path"
+                                    SemanticProperties.Hint="File path for the local voice activity detection model."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Server Port" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding VadLocalServerPort}" Keyboard="Numeric"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding VadLocalServerPort}" Keyboard="Numeric"
+                                    SemanticProperties.Description="Voice activity detection local server port"
+                                    SemanticProperties.Hint="Port used by the local voice activity detection service."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Additional Parameters" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding VadLocalParameters}"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding VadLocalParameters}"
+                                    SemanticProperties.Description="Voice activity detection local parameters"
+                                    SemanticProperties.Hint="Additional command parameters for the local voice activity detection provider."
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding VadShowBuiltIn}" Spacing="8">
@@ -255,62 +297,87 @@
             <Border Style="{StaticResource HudPanel}">
                 <VerticalStackLayout Spacing="12">
 
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                         <Label Grid.Column="0"
                                Text="SPEECH-TO-TEXT"
                                Style="{StaticResource CyberLabelSection}"
                                Margin="0"
                                VerticalOptions="Center" />
-                        <Switch Grid.Column="1"
-                                IsToggled="{Binding SttEnabled, Mode=TwoWay}"
-                                Style="{StaticResource CyberSwitch}"
-                                ThumbColor="White" />
+                         <Switch Grid.Column="1"
+                                 IsToggled="{Binding SttEnabled, Mode=TwoWay}"
+                                 SemanticProperties.Description="Speech-to-text enabled"
+                                 SemanticProperties.Hint="Turns speech-to-text processing on or off."
+                                 Style="{StaticResource CyberSwitch}"
+                                 ThumbColor="White" />
                     </Grid>
 
                     <VerticalStackLayout IsVisible="{Binding SttEnabled}" Spacing="10">
-                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
-                            <Button Grid.Column="0" Text="Remote"
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" RowSpacing="8" ColumnSpacing="8">
+                            <Button Grid.Row="0" Grid.Column="0" Text="Remote"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Stt:0"
                                      BackgroundColor="{Binding SttRemoteButtonColor}"
                                      TextColor="{Binding SttRemoteButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use remote speech-to-text"
+                                     SemanticProperties.Hint="Routes speech-to-text to a remote provider."
                                      Style="{StaticResource StageModeButton}" />
-                            <Button Grid.Column="1" Text="Local"
+                            <Button Grid.Row="0" Grid.Column="1" Text="Local"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Stt:1"
                                      BackgroundColor="{Binding SttLocalButtonColor}"
                                      TextColor="{Binding SttLocalButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use local speech-to-text"
+                                     SemanticProperties.Hint="Routes speech-to-text to a local model."
                                      Style="{StaticResource StageModeButton}" />
-                            <Button Grid.Column="2" Text="Built-In"
+                            <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Text="Built-In"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Stt:2"
                                      BackgroundColor="{Binding SttBuiltInButtonColor}"
                                      TextColor="{Binding SttBuiltInButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use built-in speech-to-text"
+                                     SemanticProperties.Hint="Routes speech-to-text to Android built-in speech recognition."
                                      Style="{StaticResource StageModeButton}" />
                         </Grid>
 
                         <VerticalStackLayout IsVisible="{Binding SttShowRemote}" Spacing="8">
                             <Label Text="Server URL" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding SttRemoteUrl}" Placeholder="http://192.168.1.100:8080"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding SttRemoteUrl}" Placeholder="http://192.168.1.100:8080"
+                                    SemanticProperties.Description="Speech-to-text remote server URL"
+                                    SemanticProperties.Hint="Remote server address for speech-to-text requests."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Model ID" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding SttRemoteModelId}" Placeholder="whisper-large-v3"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding SttRemoteModelId}" Placeholder="whisper-large-v3"
+                                    SemanticProperties.Description="Speech-to-text remote model ID"
+                                    SemanticProperties.Hint="Model identifier for the remote speech-to-text provider."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding SttRemoteApiKey}" IsPassword="True"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding SttRemoteApiKey}" IsPassword="True"
+                                    SemanticProperties.Description="Speech-to-text remote API key"
+                                    SemanticProperties.Hint="Optional API key for the remote speech-to-text provider."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Timeout (seconds)" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding SttRemoteTimeout}" Keyboard="Numeric"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding SttRemoteTimeout}" Keyboard="Numeric"
+                                    SemanticProperties.Description="Speech-to-text remote timeout"
+                                    SemanticProperties.Hint="Timeout in seconds for remote speech-to-text requests."
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding SttShowLocal}" Spacing="8">
                             <Label Text="Model Path" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding SttLocalModelPath}" Placeholder="/storage/emulated/0/Models/whisper.bin"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding SttLocalModelPath}" Placeholder="/storage/emulated/0/Models/whisper.bin"
+                                    SemanticProperties.Description="Speech-to-text local model path"
+                                    SemanticProperties.Hint="File path for the local speech-to-text model."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Server Port" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding SttLocalServerPort}" Keyboard="Numeric"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding SttLocalServerPort}" Keyboard="Numeric"
+                                    SemanticProperties.Description="Speech-to-text local server port"
+                                    SemanticProperties.Hint="Port used by the local speech-to-text service."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Additional Parameters" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding SttLocalParameters}" Placeholder="--threads 4 --beam-size 1"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding SttLocalParameters}" Placeholder="--threads 4 --beam-size 1"
+                                    SemanticProperties.Description="Speech-to-text local parameters"
+                                    SemanticProperties.Hint="Additional command parameters for the local speech-to-text provider."
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding SttShowBuiltIn}" Spacing="8">
@@ -327,16 +394,18 @@
             <Border Style="{StaticResource HudPanel}">
                 <VerticalStackLayout Spacing="12">
 
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                         <Label Grid.Column="0"
                                Text="LANGUAGE MODEL"
                                Style="{StaticResource CyberLabelSection}"
                                Margin="0"
                                VerticalOptions="Center" />
-                        <Switch Grid.Column="1"
-                                IsToggled="{Binding LlmEnabled, Mode=TwoWay}"
-                                Style="{StaticResource CyberSwitch}"
-                                ThumbColor="White" />
+                         <Switch Grid.Column="1"
+                                 IsToggled="{Binding LlmEnabled, Mode=TwoWay}"
+                                 SemanticProperties.Description="Language model enabled"
+                                 SemanticProperties.Hint="Turns language model responses on or off."
+                                 Style="{StaticResource CyberSwitch}"
+                                 ThumbColor="White" />
                     </Grid>
 
                     <VerticalStackLayout IsVisible="{Binding LlmEnabled}" Spacing="10">
@@ -345,39 +414,59 @@
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Llm:0"
                                      BackgroundColor="{Binding LlmRemoteButtonColor}"
                                      TextColor="{Binding LlmRemoteButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use remote language model"
+                                     SemanticProperties.Hint="Routes language model requests to a remote provider."
                                      Style="{StaticResource StageModeButton}" />
                             <Button Grid.Column="1" Text="Local"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Llm:1"
                                      BackgroundColor="{Binding LlmLocalButtonColor}"
                                      TextColor="{Binding LlmLocalButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use local language model"
+                                     SemanticProperties.Hint="Routes language model requests to an on-device local provider."
                                      Style="{StaticResource StageModeButton}" />
                         </Grid>
 
                         <VerticalStackLayout IsVisible="{Binding LlmShowRemote}" Spacing="8">
                             <Label Text="Server URL" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding LlmRemoteUrl}" Placeholder="http://192.168.1.100:11434"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding LlmRemoteUrl}" Placeholder="http://192.168.1.100:11434"
+                                    SemanticProperties.Description="Language model remote server URL"
+                                    SemanticProperties.Hint="Remote server address for language model requests."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Model ID" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding LlmRemoteModelId}" Placeholder="llama3.2:3b"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding LlmRemoteModelId}" Placeholder="llama3.2:3b"
+                                    SemanticProperties.Description="Language model remote model ID"
+                                    SemanticProperties.Hint="Model identifier for the remote language model provider."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding LlmRemoteApiKey}" IsPassword="True"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding LlmRemoteApiKey}" IsPassword="True"
+                                    SemanticProperties.Description="Language model remote API key"
+                                    SemanticProperties.Hint="Optional API key for the remote language model provider."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Timeout (seconds)" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding LlmRemoteTimeout}" Keyboard="Numeric"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding LlmRemoteTimeout}" Keyboard="Numeric"
+                                    SemanticProperties.Description="Language model remote timeout"
+                                    SemanticProperties.Hint="Timeout in seconds for remote language model requests."
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding LlmShowLocal}" Spacing="8">
                             <Label Text="Model Path" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding LlmLocalModelPath}" Placeholder="/storage/emulated/0/Models/llama3.gguf"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding LlmLocalModelPath}" Placeholder="/storage/emulated/0/Models/llama3.gguf"
+                                    SemanticProperties.Description="Language model local model path"
+                                    SemanticProperties.Hint="File path for the local language model."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Server Port" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding LlmLocalServerPort}" Keyboard="Numeric"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding LlmLocalServerPort}" Keyboard="Numeric"
+                                    SemanticProperties.Description="Language model local server port"
+                                    SemanticProperties.Hint="Port used by the local language model service."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Additional Parameters" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding LlmLocalParameters}" Placeholder="--n-gpu-layers 33 --ctx-size 4096"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding LlmLocalParameters}" Placeholder="--n-gpu-layers 33 --ctx-size 4096"
+                                    SemanticProperties.Description="Language model local parameters"
+                                    SemanticProperties.Hint="Additional command parameters for the local language model provider."
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
                     </VerticalStackLayout>
 
@@ -388,62 +477,87 @@
             <Border Style="{StaticResource HudPanel}">
                 <VerticalStackLayout Spacing="12">
 
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                         <Label Grid.Column="0"
                                Text="TEXT-TO-SPEECH"
                                Style="{StaticResource CyberLabelSection}"
                                Margin="0"
                                VerticalOptions="Center" />
-                        <Switch Grid.Column="1"
-                                IsToggled="{Binding TtsEnabled, Mode=TwoWay}"
-                                Style="{StaticResource CyberSwitch}"
-                                ThumbColor="White" />
+                         <Switch Grid.Column="1"
+                                 IsToggled="{Binding TtsEnabled, Mode=TwoWay}"
+                                 SemanticProperties.Description="Text-to-speech enabled"
+                                 SemanticProperties.Hint="Turns assistant voice playback on or off."
+                                 Style="{StaticResource CyberSwitch}"
+                                 ThumbColor="White" />
                     </Grid>
 
                     <VerticalStackLayout IsVisible="{Binding TtsEnabled}" Spacing="10">
-                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
-                            <Button Grid.Column="0" Text="Remote"
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" RowSpacing="8" ColumnSpacing="8">
+                            <Button Grid.Row="0" Grid.Column="0" Text="Remote"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Tts:0"
                                      BackgroundColor="{Binding TtsRemoteButtonColor}"
                                      TextColor="{Binding TtsRemoteButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use remote text-to-speech"
+                                     SemanticProperties.Hint="Routes text-to-speech to a remote provider."
                                      Style="{StaticResource StageModeButton}" />
-                            <Button Grid.Column="1" Text="Local"
+                            <Button Grid.Row="0" Grid.Column="1" Text="Local"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Tts:1"
                                      BackgroundColor="{Binding TtsLocalButtonColor}"
                                      TextColor="{Binding TtsLocalButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use local text-to-speech"
+                                     SemanticProperties.Hint="Routes text-to-speech to a local provider."
                                      Style="{StaticResource StageModeButton}" />
-                            <Button Grid.Column="2" Text="Built-In"
+                            <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Text="Built-In"
                                      Command="{Binding SetStageModeCommand}" CommandParameter="Tts:2"
                                      BackgroundColor="{Binding TtsBuiltInButtonColor}"
                                      TextColor="{Binding TtsBuiltInButtonTextColor}"
+                                     HeightRequest="48"
+                                     SemanticProperties.Description="Use built-in text-to-speech"
+                                     SemanticProperties.Hint="Routes text-to-speech to Android built-in speech playback."
                                      Style="{StaticResource StageModeButton}" />
                         </Grid>
 
                         <VerticalStackLayout IsVisible="{Binding TtsShowRemote}" Spacing="8">
                             <Label Text="Server URL" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding TtsRemoteUrl}" Placeholder="http://192.168.1.100:8080"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding TtsRemoteUrl}" Placeholder="http://192.168.1.100:8080"
+                                    SemanticProperties.Description="Text-to-speech remote server URL"
+                                    SemanticProperties.Hint="Remote server address for text-to-speech requests."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Model ID" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding TtsRemoteModelId}" Placeholder="kokoro-v1"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding TtsRemoteModelId}" Placeholder="kokoro-v1"
+                                    SemanticProperties.Description="Text-to-speech remote model ID"
+                                    SemanticProperties.Hint="Model identifier for the remote text-to-speech provider."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding TtsRemoteApiKey}" IsPassword="True"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding TtsRemoteApiKey}" IsPassword="True"
+                                    SemanticProperties.Description="Text-to-speech remote API key"
+                                    SemanticProperties.Hint="Optional API key for the remote text-to-speech provider."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Timeout (seconds)" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding TtsRemoteTimeout}" Keyboard="Numeric"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding TtsRemoteTimeout}" Keyboard="Numeric"
+                                    SemanticProperties.Description="Text-to-speech remote timeout"
+                                    SemanticProperties.Hint="Timeout in seconds for remote text-to-speech requests."
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding TtsShowLocal}" Spacing="8">
                             <Label Text="Model Path" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding TtsLocalModelPath}" Placeholder="/storage/emulated/0/Models/tts.bin"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding TtsLocalModelPath}" Placeholder="/storage/emulated/0/Models/tts.bin"
+                                    SemanticProperties.Description="Text-to-speech local model path"
+                                    SemanticProperties.Hint="File path for the local text-to-speech model."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Server Port" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding TtsLocalServerPort}" Keyboard="Numeric"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding TtsLocalServerPort}" Keyboard="Numeric"
+                                    SemanticProperties.Description="Text-to-speech local server port"
+                                    SemanticProperties.Hint="Port used by the local text-to-speech service."
+                                    Style="{StaticResource CyberEntry}" />
                             <Label Text="Additional Parameters" Style="{StaticResource HudMetricLabel}" />
-                            <Entry Text="{Binding TtsLocalParameters}"
-                                   Style="{StaticResource CyberEntry}" />
+                             <Entry Text="{Binding TtsLocalParameters}"
+                                    SemanticProperties.Description="Text-to-speech local parameters"
+                                    SemanticProperties.Hint="Additional command parameters for the local text-to-speech provider."
+                                    Style="{StaticResource CyberEntry}" />
                         </VerticalStackLayout>
 
                         <VerticalStackLayout IsVisible="{Binding TtsShowBuiltIn}" Spacing="8">
@@ -465,19 +579,27 @@
                             Margin="0" />
 
                      <Label Text="Name" Style="{StaticResource HudMetricLabel}" />
-                     <Entry Text="{Binding McpNameInput}" Placeholder="obsidian-server"
-                            Style="{StaticResource CyberEntry}" />
+                      <Entry Text="{Binding McpNameInput}" Placeholder="obsidian-server"
+                             SemanticProperties.Description="MCP server name"
+                             SemanticProperties.Hint="Name for a configured MCP server."
+                             Style="{StaticResource CyberEntry}" />
 
                      <Label Text="Endpoint" Style="{StaticResource HudMetricLabel}" />
-                     <Entry Text="{Binding McpEndpointInput}" Placeholder="http://192.168.1.10:3000/sse"
-                            Style="{StaticResource CyberEntry}" />
+                      <Entry Text="{Binding McpEndpointInput}" Placeholder="http://192.168.1.10:3000/sse"
+                             SemanticProperties.Description="MCP server endpoint"
+                             SemanticProperties.Hint="Network endpoint for the MCP server."
+                             Style="{StaticResource CyberEntry}" />
 
                      <Label Text="API Key (optional)" Style="{StaticResource HudMetricLabel}" />
-                     <Entry Text="{Binding McpApiKeyInput}" IsPassword="True"
-                            Style="{StaticResource CyberEntry}" />
+                      <Entry Text="{Binding McpApiKeyInput}" IsPassword="True"
+                             SemanticProperties.Description="MCP server API key"
+                             SemanticProperties.Hint="Optional API key for the MCP server."
+                             Style="{StaticResource CyberEntry}" />
 
                     <Button Text="ADD MCP SERVER"
                             Command="{Binding AddMcpServerCommand}"
+                            SemanticProperties.Description="Add MCP server"
+                            SemanticProperties.Hint="Adds the MCP server details to the configured server list."
                             Style="{StaticResource GhostButton}" />
 
                      <Label Text="Configured Servers"
@@ -499,12 +621,15 @@
                                                    TextColor="{StaticResource CrimsonTextSecondary}"
                                                    FontSize="11" LineBreakMode="TailTruncation" />
                                         </VerticalStackLayout>
-                                        <Button Grid.Column="1"
-                                                Text="Remove"
-                                                Command="{Binding BindingContext.RemoveMcpServerCommand, Source={x:Reference SettingsRoot}}"
-                                                CommandParameter="{Binding .}"
-                                                Style="{StaticResource CompactGhostButton}"
-                                                VerticalOptions="Center" />
+                                         <Button Grid.Column="1"
+                                                 Text="Remove"
+                                                 Command="{Binding BindingContext.RemoveMcpServerCommand, Source={x:Reference SettingsRoot}}"
+                                                 CommandParameter="{Binding .}"
+                                                 SemanticProperties.Description="Remove MCP server"
+                                                 SemanticProperties.Hint="Removes this MCP server from the configured server list."
+                                                 Style="{StaticResource CompactGhostButton}"
+                                                 HeightRequest="48"
+                                                 VerticalOptions="Center" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -515,10 +640,12 @@
             </Border>
 
             <!-- ══ SAVE ═════════════════════════════════════════════════════════════ -->
-            <Button Text="SAVE SETTINGS"
-                    Command="{Binding SaveSettingsCommand}"
-                    Style="{StaticResource CyberButton}"
-                    Margin="0,8,0,16" />
+             <Button Text="SAVE SETTINGS"
+                     Command="{Binding SaveSettingsCommand}"
+                     SemanticProperties.Description="Save settings"
+                     SemanticProperties.Hint="Saves all assistant configuration changes."
+                     Style="{StaticResource CyberButton}"
+                     Margin="0,8,0,16" />
 
         </VerticalStackLayout>
         </ScrollView>

@@ -134,16 +134,13 @@ public sealed class WhisperLocalSttProvider(IModelRegistry modelRegistry, ISetti
     private string BuildParamsJson()
     {
         var parameters = settings.GetActiveProvider("STT")?.Parameters ?? [];
-        var additionalParameters = settings.PipelineSettings.Stt.Local?.AdditionalParameters;
-        if (parameters.Count == 0 && string.IsNullOrWhiteSpace(additionalParameters))
+        if (parameters.Count == 0)
             return "{}";
 
         var payload = new Dictionary<string, object?>();
         foreach (var pair in parameters)
             payload[pair.Key] = pair.Value;
 
-        if (!string.IsNullOrWhiteSpace(additionalParameters))
-            payload["additionalParameters"] = additionalParameters;
 
         return JsonSerializer.Serialize(payload);
     }

@@ -38,10 +38,11 @@
         </Grid>
 
         <Grid Grid.Row="0">
+            <ScrollView>
             <VerticalStackLayout x:Name="FocusContainer"
-                                 Spacing="12"
-                                 Padding="18,28,18,0"
-                                 VerticalOptions="Start">
+                                  Spacing="12"
+                                  Padding="18,28,18,24"
+                                  VerticalOptions="Start">
                 <VerticalStackLayout Spacing="12">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                         <VerticalStackLayout Grid.Column="0" Spacing="3">
@@ -67,19 +68,35 @@
                         </Border>
                     </Grid>
 
-                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
-                        <Button Grid.Column="0"
-                                Text="DETAILS"
-                                Command="{Binding ToggleDetailCommand}"
-                                Style="{StaticResource CompactGhostButton}" />
-                        <Button Grid.Column="1"
-                                Text="MEMORY"
-                                Command="{Binding ToggleMemoryCommand}"
-                                Style="{StaticResource CompactGhostButton}" />
-                        <Button Grid.Column="2"
-                                Text="CONFIG"
-                                Command="{Binding NavigateToSettingsCommand}"
-                                Style="{StaticResource CompactGhostButton}" />
+                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" RowSpacing="10" ColumnSpacing="10">
+                        <Button Grid.Row="0" Grid.Column="0"
+                                 Text="DETAILS"
+                                 Command="{Binding ToggleDetailCommand}"
+                                 HeightRequest="48"
+                                 SemanticProperties.Description="Open assistant details"
+                                 SemanticProperties.Hint="Shows service health, transcript, model, and response details."
+                                 Style="{StaticResource CompactGhostButton}" />
+                        <Button Grid.Row="0" Grid.Column="1"
+                                 Text="MEMORY"
+                                 Command="{Binding ToggleMemoryCommand}"
+                                 HeightRequest="48"
+                                 SemanticProperties.Description="Open memory panel"
+                                 SemanticProperties.Hint="Shows memory vault status and recent memory events."
+                                 Style="{StaticResource CompactGhostButton}" />
+                        <Button Grid.Row="1" Grid.Column="0"
+                                 Text="CONFIG"
+                                 Command="{Binding NavigateToSettingsCommand}"
+                                 HeightRequest="48"
+                                 SemanticProperties.Description="Open settings"
+                                 SemanticProperties.Hint="Navigates to the full assistant settings page."
+                                 Style="{StaticResource CompactGhostButton}" />
+                        <Button Grid.Row="1" Grid.Column="1"
+                                 Text="{Binding IsListening, Converter={StaticResource BoolToListenTextConverter}}"
+                                 Command="{Binding ToggleListeningCommand}"
+                                 HeightRequest="48"
+                                 SemanticProperties.Description="Start or stop listening"
+                                 SemanticProperties.Hint="Toggles assistant microphone listening."
+                                 Style="{StaticResource CompactGhostButton}" />
                     </Grid>
                 </VerticalStackLayout>
 
@@ -107,10 +124,10 @@
                                        Style="{StaticResource CyberLabelSection}"
                                        Margin="0"
                                        FontSize="12" />
-                                <Label Text="Voice, memory, routing, and response systems are staged for command execution."
-                                       Style="{StaticResource CyberLabelMuted}"
-                                       FontSize="11"
-                                       LineBreakMode="TailTruncation" />
+                                 <Label Text="Voice, memory, routing, and response systems are staged for command execution."
+                                        Style="{StaticResource CyberLabelMuted}"
+                                        FontSize="11"
+                                        LineBreakMode="WordWrap" />
                             </VerticalStackLayout>
 
                             <Border Grid.Column="2"
@@ -133,9 +150,9 @@
                 </Border>
 
                 <Border Style="{StaticResource NeonFrame}"
-                        MinimumHeightRequest="248">
+                         MinimumHeightRequest="248">
                     <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
-                        <Grid Grid.Row="0" HeightRequest="146">
+                        <Grid Grid.Row="0" MinimumHeightRequest="146">
                             <Border x:Name="AssistantRing"
                                     WidthRequest="146"
                                     HeightRequest="146"
@@ -210,13 +227,17 @@
                         </Grid>
 
                         <VerticalStackLayout Grid.Row="1" HorizontalOptions="Center" Spacing="3">
-                            <Label Text="{Binding StatusText}"
-                                   Style="{StaticResource CyberLabelTitle}"
-                                   FontSize="16"
-                                   HorizontalOptions="Center" />
-                            <Label Text="VOICE ACTIVITY DETECTION MATRIX"
-                                   Style="{StaticResource HudMetricLabel}"
-                                   HorizontalOptions="Center" />
+                             <Label Text="{Binding StatusText}"
+                                    Style="{StaticResource CyberLabelTitle}"
+                                    FontSize="16"
+                                    HorizontalOptions="Center"
+                                    HorizontalTextAlignment="Center"
+                                    LineBreakMode="WordWrap" />
+                             <Label Text="VOICE ACTIVITY DETECTION MATRIX"
+                                    Style="{StaticResource HudMetricLabel}"
+                                    HorizontalOptions="Center"
+                                    HorizontalTextAlignment="Center"
+                                    LineBreakMode="WordWrap" />
                         </VerticalStackLayout>
 
                         <HorizontalStackLayout Grid.Row="2"
@@ -252,16 +273,17 @@
                                Style="{StaticResource CyberLabelSection}"
                                Margin="0"
                                FontSize="12" />
-                        <Label Text="{Binding StreamingTranscriptDisplay}"
-                               TextColor="{StaticResource CrimsonTextPrimary}"
-                               FontSize="14"
-                               FontAttributes="Bold"
-                               LineBreakMode="TailTruncation" />
-                    </VerticalStackLayout>
-                </Border>
-            </VerticalStackLayout>
+                         <Label Text="{Binding StreamingTranscriptDisplay}"
+                                TextColor="{StaticResource CrimsonTextPrimary}"
+                                FontSize="14"
+                                FontAttributes="Bold"
+                                LineBreakMode="WordWrap" />
+                     </VerticalStackLayout>
+                 </Border>
+             </VerticalStackLayout>
+            </ScrollView>
 
-            <Grid x:Name="PanelOverlay"
+             <Grid x:Name="PanelOverlay"
                   Padding="14,24,14,16"
                   Opacity="0"
                   InputTransparent="True">
@@ -269,24 +291,28 @@
                         Padding="12">
                     <Grid RowDefinitions="Auto,*" RowSpacing="12">
                         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                            <Button Grid.Column="0"
-                                    Text="‹"
-                                    Command="{Binding ClosePanelCommand}"
-                                    Style="{StaticResource GhostButton}"
-                                    WidthRequest="46"
-                                    HeightRequest="42"
-                                    FontSize="22"
-                                    Padding="0" />
+                             <Button Grid.Column="0"
+                                     Text="‹"
+                                     Command="{Binding ClosePanelCommand}"
+                                     Style="{StaticResource GhostButton}"
+                                      WidthRequest="48"
+                                      HeightRequest="48"
+                                     FontSize="22"
+                                     SemanticProperties.Description="Back to main assistant"
+                                     SemanticProperties.Hint="Closes the active assistant panel and returns to the main view."
+                                     Padding="0" />
                             <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
-                                <Label Text="{Binding PanelTitle}" Style="{StaticResource CyberLabelTitle}" FontSize="18" />
-                                <Label Text="{Binding PanelSubtitle}" Style="{StaticResource CyberLabelMuted}" FontSize="11" LineBreakMode="TailTruncation" />
+                                <Label Text="{Binding PanelTitle}" Style="{StaticResource CyberLabelTitle}" FontSize="18" LineBreakMode="WordWrap" />
+                                <Label Text="{Binding PanelSubtitle}" Style="{StaticResource CyberLabelMuted}" FontSize="11" LineBreakMode="WordWrap" />
                             </VerticalStackLayout>
-                            <Button Grid.Column="2"
-                                    Text="CLOSE"
-                                    Command="{Binding ClosePanelCommand}"
-                                    Style="{StaticResource CompactGhostButton}"
-                                    WidthRequest="84"
-                                    HeightRequest="42" />
+                             <Button Grid.Column="2"
+                                     Text="CLOSE"
+                                     Command="{Binding ClosePanelCommand}"
+                                     Style="{StaticResource CompactGhostButton}"
+                                     WidthRequest="96"
+                                     SemanticProperties.Description="Close assistant panel"
+                                     SemanticProperties.Hint="Closes the active assistant panel."
+                                     HeightRequest="48" />
                         </Grid>
 
             <ScrollView x:Name="DetailPanel" Grid.Row="1" TranslationY="80" Opacity="0" InputTransparent="True">
@@ -298,7 +324,7 @@
                                     <Label Text="SERVICE HEALTH" Style="{StaticResource CyberLabelSection}" Margin="0" />
                                     <Label Text="{Binding ServiceHealthSummaryText}" Style="{StaticResource CyberLabelMuted}" FontSize="11" LineBreakMode="TailTruncation" />
                                 </VerticalStackLayout>
-                                <Button Grid.Column="1" Text="TEST" Command="{Binding RefreshServiceHealthCommand}" Style="{StaticResource CompactGhostButton}" WidthRequest="82" />
+                                <Button Grid.Column="1" Text="TEST" Command="{Binding RefreshServiceHealthCommand}" Style="{StaticResource CompactGhostButton}" WidthRequest="82" HeightRequest="48" SemanticProperties.Description="Test service health" SemanticProperties.Hint="Refreshes assistant service health checks." />
                             </Grid>
                             <VerticalStackLayout BindableLayout.ItemsSource="{Binding ServiceHealthItems}" Spacing="8">
                                 <BindableLayout.ItemTemplate>
@@ -329,12 +355,12 @@
                                 <Label Grid.Column="1" Text="STREAMING" TextColor="{StaticResource CrimsonSuccess}" FontSize="10" FontAttributes="Bold" CharacterSpacing="1.2" />
                             </Grid>
                             <Label Text="{Binding StreamingTranscriptDisplay}" TextColor="{StaticResource CrimsonTextPrimary}" FontSize="17" FontAttributes="Bold" LineBreakMode="WordWrap" MinimumHeightRequest="72" />
-                            <Label Text="{Binding LastTranscription}" Style="{StaticResource CyberLabelMuted}" FontSize="12" LineBreakMode="TailTruncation" />
+                            <Label Text="{Binding LastTranscription}" Style="{StaticResource CyberLabelMuted}" FontSize="12" LineBreakMode="WordWrap" />
                         </VerticalStackLayout>
                     </Border>
 
-                    <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="14">
-                        <Border Grid.Column="0" Style="{StaticResource HudPanel}">
+                    <Grid Grid.Row="2" RowDefinitions="Auto,Auto" RowSpacing="14">
+                        <Border Grid.Row="0" Style="{StaticResource HudPanel}">
                             <VerticalStackLayout Spacing="10">
                                 <Label Text="MODEL STATUS" Style="{StaticResource CyberLabelSection}" Margin="0" />
                                 <Label Text="{Binding ActiveModelName}" Style="{StaticResource CyberLabelTitle}" FontSize="15" LineBreakMode="TailTruncation" />
@@ -355,7 +381,7 @@
                             </VerticalStackLayout>
                         </Border>
 
-                        <Border Grid.Column="1" Style="{StaticResource HudPanel}">
+                        <Border Grid.Row="1" Style="{StaticResource HudPanel}">
                             <VerticalStackLayout Spacing="10">
                                 <Label Text="SERVER / GPU" Style="{StaticResource CyberLabelSection}" Margin="0" />
                                 <Label Text="{Binding ServerHealthText}" Style="{StaticResource CyberLabelTitle}" FontSize="15" LineBreakMode="TailTruncation" />
@@ -400,7 +426,7 @@
                                 </Border>
                             </Grid>
                             <Label Text="{Binding MemoryVaultPathText}" TextColor="{StaticResource CrimsonTextPrimary}" FontSize="13" LineBreakMode="TailTruncation" />
-                            <Button Text="OPEN MEMORY VAULT" Command="{Binding NavigateToMemoryCommand}" Style="{StaticResource GhostButton}" HeightRequest="46" />
+                            <Button Text="OPEN MEMORY VAULT" Command="{Binding NavigateToMemoryCommand}" Style="{StaticResource GhostButton}" HeightRequest="48" SemanticProperties.Description="Open memory vault" SemanticProperties.Hint="Navigates to the full memory vault page." />
                         </VerticalStackLayout>
                     </Border>
 
@@ -432,49 +458,6 @@
                 </Grid>
             </ScrollView>
 
-            <ScrollView x:Name="ConfigPanel" Grid.Row="1" TranslationY="80" Opacity="0" InputTransparent="True">
-                <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="16">
-                    <Border Grid.Row="0" Style="{StaticResource NeonFrame}">
-                        <VerticalStackLayout Spacing="10">
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                <VerticalStackLayout Grid.Column="0" Spacing="3">
-                                    <Label Text="SYSTEM CONFIG" Style="{StaticResource CyberLabelSection}" Margin="0" />
-                                    <Label Text="Provider routing, model selection, audio route, and MCP fabric." Style="{StaticResource CyberLabelMuted}" FontSize="12" LineBreakMode="WordWrap" />
-                                </VerticalStackLayout>
-                                <Border Grid.Column="1" Style="{StaticResource StatusPill}" VerticalOptions="Start">
-                                    <Label Text="ROUTED" TextColor="{StaticResource CrimsonSuccess}" FontSize="10" FontAttributes="Bold" CharacterSpacing="1.1" />
-                                </Border>
-                            </Grid>
-                            <Button Text="OPEN FULL CONFIG" Command="{Binding NavigateToSettingsCommand}" Style="{StaticResource GhostButton}" HeightRequest="46" />
-                        </VerticalStackLayout>
-                    </Border>
-
-                    <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="14">
-                        <Border Grid.Column="0" Style="{StaticResource HudPanel}">
-                            <VerticalStackLayout Spacing="10">
-                                <Label Text="MODEL ROUTE" Style="{StaticResource CyberLabelSection}" Margin="0" />
-                                <Label Text="{Binding ActiveModelName}" Style="{StaticResource CyberLabelTitle}" FontSize="15" LineBreakMode="TailTruncation" />
-                                <Label Text="{Binding ModelEndpointText}" Style="{StaticResource CyberLabelMuted}" FontSize="11" LineBreakMode="TailTruncation" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Border Grid.Column="1" Style="{StaticResource HudPanel}">
-                            <VerticalStackLayout Spacing="10">
-                                <Label Text="SYSTEM ROUTE" Style="{StaticResource CyberLabelSection}" Margin="0" />
-                                <Label Text="{Binding ServerHealthText}" Style="{StaticResource CyberLabelTitle}" FontSize="15" LineBreakMode="TailTruncation" />
-                                <Label Text="{Binding GpuStatusText}" Style="{StaticResource CyberLabelMuted}" FontSize="11" LineBreakMode="TailTruncation" />
-                            </VerticalStackLayout>
-                        </Border>
-                    </Grid>
-
-                    <Border Grid.Row="2" Style="{StaticResource HudPanel}">
-                        <VerticalStackLayout Spacing="8">
-                            <Label Text="ACTIVE VOICE ROUTE" Style="{StaticResource CyberLabelSection}" Margin="0" />
-                            <Label Text="{Binding ConfigVoiceRouteText}" TextColor="{StaticResource CrimsonTextPrimary}" FontSize="13" LineBreakMode="WordWrap" />
-                        </VerticalStackLayout>
-                    </Border>
-                </Grid>
-            </ScrollView>
                     </Grid>
                 </Border>
             </Grid>

@@ -6,10 +6,9 @@ namespace QuantumZ.Infrastructure.Services;
 public class AIIntegrationService(
     IAIClient aiClient,
     IMcpOrchestrator mcpOrchestrator,
-    ISettingsService settingsService) : IAIIntegrationService
+    ISettingsService settingsService,
+    IDebugLogger debugLogger) : IAIIntegrationService
 {
-    private const int MaxIterations = 6;
-
     public async ValueTask<string> ExecutePromptAsync(AiRequest request, CancellationToken ct = default)
     {
         // Resolve system prompt: explicit caller value wins, then VoiceAssistantSettings default.
@@ -31,7 +30,7 @@ public class AIIntegrationService(
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // Non-fatal: continue without MCP tools
-                _ = ex.Message; // reference to satisfy TreatWarningsAsErrors
+                debugLogger.Log("AIIntegration", $"MCP tool discovery failed: {ex.Message}", LogLevel.Warning);
             }
         }
 
@@ -47,7 +46,8 @@ public class AIIntegrationService(
         if (!string.IsNullOrWhiteSpace(enrichedRequest.Prompt))
             currentHistory.Add(new ChatMessage("user", enrichedRequest.Prompt));
 
-        for (var iteration = 0; iteration < MaxIterations; iteration++)
+        var maxIterations = settingsService.VoiceAssistantSettings.MaxToolCallIterations;
+        for (var iteration = 0; iteration < maxIterations; iteration++)
         {
             ct.ThrowIfCancellationRequested();
             var aiRequest = enrichedRequest with { Prompt = string.Empty, History = currentHistory };
@@ -69,6 +69,7 @@ public class AIIntegrationService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
+                    debugLogger.Log("AIIntegration", $"MCP tool '{toolCall.Name}' execution failed: {ex.Message}", LogLevel.Error);
                     result = new ToolResult(false, string.Empty, ex.Message);
                 }
 

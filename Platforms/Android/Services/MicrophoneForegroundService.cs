@@ -46,17 +46,6 @@ public class MicrophoneForegroundService : Service
         CreateNotificationChannel();
         StartForeground(NotificationId, BuildNotification());
 
-        // Debug-only: test utterance injection (v2 pipeline does not support
-        // bypassing audio capture; log and skip — full support planned in Phase 5)
-        if (intent?.Action == "com.quantumz.assistant.TEST_UTTERANCE")
-        {
-            var utterance = intent.GetStringExtra("utterance");
-            _logger?.Log("MicService",
-                $"TEST_UTTERANCE intent received (not supported in v2 pipeline): '{utterance}'",
-                DebugLogLevel.Warning);
-            return StartCommandResult.Sticky;
-        }
-
         if (_cts is not null && !_cts.IsCancellationRequested)
         {
             _logger?.Log("MicService", "Pipeline already running; ignoring duplicate start request");
@@ -70,12 +59,31 @@ public class MicrophoneForegroundService : Service
     public override void OnDestroy()
     {
         _logger?.Log("MicService", "OnDestroy — stopping pipeline");
+        
+        // Stop the pipeline synchronously (cancels capture loop, releases AudioRecord)
         _controller?.StopAsync();
 
         if (_controller is not null)
         {
-            // Fire-and-forget async dispose so wake word provider (ONNX) is released cleanly
-            _ = _controller.DisposeAsync().AsTask();
+            // Synchronously wait for async disposal with timeout to ensure wake word provider
+            // (ONNX session, NPU handles) is fully released before service destruction.
+            // Timeout prevents indefinite blocking if disposal hangs.
+            try
+            {
+                var disposeTask = _controller.DisposeAsync().AsTask();
+                if (disposeTask.Wait(TimeSpan.FromSeconds(5)))
+                {
+                    _logger?.Log("MicService", "Controller disposed successfully");
+                }
+                else
+                {
+                    _logger?.Log("MicService", "Controller disposal timed out after 5 seconds", DebugLogLevel.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Log("MicService", $"DisposeAsync error: {ex.Message}", DebugLogLevel.Warning);
+            }
         }
 
         _cts?.Cancel();

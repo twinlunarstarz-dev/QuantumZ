@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Concurrent;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using QuantumZ.Core.Interfaces;
 using QuantumZ.Core.Models;
 
@@ -8,6 +10,19 @@ namespace QuantumZ.Infrastructure.Services;
 public sealed class DebugLoggerService(IAudioVisualizer audioVisualizer, ISpeechStateService speechState) : IDebugLogger, IObservable<DebugEvent>, IDisposable
 {
     private const int MaxEvents = 1000;
+    private static readonly Regex SecretAssignmentPattern = new(
+        "(?i)(api[_-]?key|authorization|bearer|token|secret|password)(\\s*[=:]\\s*)([^\\s,;\"'}]+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex BearerPattern = new(
+        "(?i)bearer\\s+([A-Za-z0-9._~+/=-]{8,})",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex OpenAiStyleKeyPattern = new(
+        "(?i)\\b(sk-[A-Za-z0-9._-]{6,})",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly string[] SensitiveMemberNames = ["apikey", "api_key", "authorization", "bearer", "token", "secret", "password"];
 
     private readonly ObservableCollection<DebugEvent> _events = [];
     private readonly ConcurrentQueue<DebugEvent> _pendingEvents = new();
@@ -53,10 +68,12 @@ public sealed class DebugLoggerService(IAudioVisualizer audioVisualizer, ISpeech
         if (_disposed)
             return;
 
-        System.Diagnostics.Debug.WriteLine($"QuantumZ: {@event.Component}: {@event.Level}: {@event.Message}");
+        var sanitizedEvent = SanitizeEvent(@event);
+
+        System.Diagnostics.Debug.WriteLine($"QuantumZ: {sanitizedEvent.Component}: {sanitizedEvent.Level}: {sanitizedEvent.Message}");
 #if ANDROID
-        var androidMessage = $"{@event.Component}: {@event.Level}: {@event.Message}";
-        switch (@event.Level)
+        var androidMessage = $"{sanitizedEvent.Component}: {sanitizedEvent.Level}: {sanitizedEvent.Message}";
+        switch (sanitizedEvent.Level)
         {
             case LogLevel.Error:
                 global::Android.Util.Log.Error("QuantumZ", androidMessage);
@@ -74,7 +91,7 @@ public sealed class DebugLoggerService(IAudioVisualizer audioVisualizer, ISpeech
 #endif
 
         EnsurePipelineStateSubscriptions();
-        _pendingEvents.Enqueue(@event);
+        _pendingEvents.Enqueue(sanitizedEvent);
 
         if (Interlocked.Exchange(ref _isBatching, 1) == 0)
         {
@@ -93,6 +110,87 @@ public sealed class DebugLoggerService(IAudioVisualizer audioVisualizer, ISpeech
     public void LogStateChange(string component, string state, object? payload = null)
     {
         LogEvent(new DebugEvent(DateTime.Now, component, LogLevel.Trace, $"State changed: {state}", payload));
+    }
+
+    private static DebugEvent SanitizeEvent(DebugEvent debugEvent) =>
+        debugEvent with
+        {
+            Component = SanitizeText(debugEvent.Component),
+            Message = SanitizeText(debugEvent.Message),
+            Payload = SanitizePayload(debugEvent.Payload)
+        };
+
+    private static string SanitizeText(string value)
+    {
+        var sanitized = BearerPattern.Replace(value, "Bearer ****");
+        sanitized = SecretAssignmentPattern.Replace(sanitized, match => $"{match.Groups[1].Value}{match.Groups[2].Value}{MaskSecret(match.Groups[3].Value)}");
+        return OpenAiStyleKeyPattern.Replace(sanitized, match => MaskSecret(match.Value));
+    }
+
+    private static object? SanitizePayload(object? payload)
+    {
+        if (payload is null)
+            return null;
+
+        if (payload is string text)
+            return SanitizeText(text);
+
+        if (payload is System.Collections.IDictionary dictionary)
+        {
+            var sanitizedDictionary = new Dictionary<string, object?>();
+            foreach (System.Collections.DictionaryEntry entry in dictionary)
+            {
+                var key = entry.Key?.ToString() ?? string.Empty;
+                sanitizedDictionary[SanitizeText(key)] = IsSensitiveMemberName(key)
+                    ? MaskSecret(entry.Value?.ToString() ?? string.Empty)
+                    : SanitizePayload(entry.Value);
+            }
+
+            return sanitizedDictionary;
+        }
+
+        if (payload is System.Collections.IEnumerable enumerable and not string)
+        {
+            var sanitizedItems = new List<object?>();
+            foreach (var item in enumerable)
+                sanitizedItems.Add(SanitizePayload(item));
+
+            return sanitizedItems;
+        }
+
+        var type = payload.GetType();
+        if (type.IsPrimitive || payload is decimal or DateTime or DateTimeOffset or Guid)
+            return payload;
+
+        var sanitizedProperties = new Dictionary<string, object?>();
+        foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (property.GetIndexParameters().Length > 0)
+                continue;
+
+            var value = property.GetValue(payload);
+            sanitizedProperties[property.Name] = IsSensitiveMemberName(property.Name)
+                ? MaskSecret(value?.ToString() ?? string.Empty)
+                : SanitizePayload(value);
+        }
+
+        return sanitizedProperties.Count == 0 ? SanitizeText(payload.ToString() ?? string.Empty) : sanitizedProperties;
+    }
+
+    private static bool IsSensitiveMemberName(string name) =>
+        SensitiveMemberNames.Any(sensitive => name.Replace("_", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Contains(sensitive.Replace("_", string.Empty, StringComparison.OrdinalIgnoreCase), StringComparison.OrdinalIgnoreCase));
+
+    private static string MaskSecret(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0)
+            return string.Empty;
+
+        if (trimmed.StartsWith("sk-", StringComparison.OrdinalIgnoreCase))
+            return trimmed.Length <= 7 ? "sk-****" : $"{trimmed[..3]}****{trimmed[^4..]}";
+
+        return trimmed.Length <= 4 ? "****" : $"****{trimmed[^4..]}";
     }
 
     private void ProcessPendingEvents()

@@ -74,8 +74,17 @@ public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService sett
             Headers = { ContentType = new MediaTypeHeaderValue("audio/wav") }
         }, "file", "audio.wav");
 
-        debugLogger.LogEvent(new DebugEvent(DateTime.Now, "STT", LogLevel.Info, "Sending audio for transcription...", new { Bytes = pcm16Audio.Length, ModelId = settings.GetActiveProvider("STT")?.ModelId, Endpoint = endpoint }));
-        using var response = await httpClient.PostAsync(endpoint, content, ct);
+        var provider = settings.GetActiveProvider("STT");
+
+        debugLogger.LogEvent(new DebugEvent(DateTime.Now, "STT", LogLevel.Info, "Sending audio for transcription...", new { Bytes = pcm16Audio.Length, ModelId = provider?.ModelId, Endpoint = endpoint }));
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30)); // Reasonable default for STT transcription
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = content };
+        AddAuthorization(request, provider);
+
+        using var response = await httpClient.SendAsync(request, timeoutCts.Token);
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<TranscriptionResponse>(_jsonOptions, ct);
@@ -100,6 +109,23 @@ public sealed class RemoteSttEngine(HttpClient httpClient, ISettingsService sett
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static void AddAuthorization(HttpRequestMessage request, Core.Models.Settings.ProviderConfig? provider)
+    {
+        var apiKey = GetApiKey(provider);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+    }
+
+    private static string? GetApiKey(Core.Models.Settings.ProviderConfig? provider)
+    {
+        if (provider is null)
+            return null;
+
+        return provider.Parameters.TryGetValue("api_key", out var snakeCase) ? snakeCase
+            : provider.Parameters.TryGetValue("ApiKey", out var pascalCase) ? pascalCase
+            : null;
+    }
 
     private record TranscriptionResponse(string Text);
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -12,7 +13,6 @@ public class LlamaAIClient(
     HttpClient httpClient,
     ISettingsService settings,
     IDebugLogger debugLogger,
-    IDialogService dialogService,
     ILlamaLocalManager llamaLocalManager,
     IModelRegistry modelRegistry,
     IMcpOrchestrator mcpOrchestrator) : IAIClient, ILlmProvider
@@ -66,7 +66,13 @@ public class LlamaAIClient(
                 var llamaRequest = BuildChatRequest(candidate.ModelId, messages, request.Temperature, request.MaxTokens, stream: false, toolDefinitions);
 
                 debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, $"Sending prompt to {endpoint} using model {candidate.ModelId}.", new { PromptLength = request.Prompt.Length, candidate.ModelId, candidate.BaseUrl, ToolCount = toolDefinitions?.Count ?? 0 }));
-                using var response = await httpClient.PostAsJsonAsync(endpoint, llamaRequest, _jsonOptions, ct);
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
+                {
+                    Content = JsonContent.Create(llamaRequest, options: _jsonOptions)
+                };
+
+                AddAuthorization(httpRequest, candidate.ApiKey);
+                using var response = await httpClient.SendAsync(httpRequest, ct);
                 response.EnsureSuccessStatusCode();
 
                 var result = await response.Content.ReadFromJsonAsync<LlamaChatResponse>(_jsonOptions, ct)
@@ -95,8 +101,7 @@ public class LlamaAIClient(
             }
         }
 
-        debugLogger.Log("AIClient", "Error: AI Server unreachable both remotely and locally.");
-        await dialogService.ShowAlertAsync("Connection Error", "Unable to connect to the AI server. Please check your network or local llama.cpp instance.");
+        debugLogger.Log("AIClient", "AI server unreachable across all configured LLM routes; surfacing failure to caller without a service-level dialog.", LogLevel.Error);
         throw new HttpRequestException("AI Server is unreachable.", lastError);
     }
 
@@ -130,7 +135,13 @@ public class LlamaAIClient(
 
             debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Info, $"Sending streaming prompt to {endpoint} using model {candidate.ModelId}.", new { PromptLength = request.Prompt.Length, candidate.ModelId, candidate.BaseUrl }));
 
-            using var response = await httpClient.PostAsJsonAsync(endpoint, llamaRequest, _jsonOptions, ct);
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = JsonContent.Create(llamaRequest, options: _jsonOptions)
+            };
+
+            AddAuthorization(httpRequest, candidate.ApiKey);
+            using var response = await httpClient.SendAsync(httpRequest, ct);
             try
             {
                 response.EnsureSuccessStatusCode();
@@ -169,8 +180,7 @@ public class LlamaAIClient(
             yield break;
         }
 
-        debugLogger.Log("AIClient", "Error: AI Server unreachable both remotely and locally.");
-        await dialogService.ShowAlertAsync("Connection Error", "Unable to connect to the AI server. Please check your network or local llama.cpp instance.");
+        debugLogger.Log("AIClient", "Streaming AI server unreachable across all configured LLM routes; surfacing failure to caller without a service-level dialog.", LogLevel.Error);
         throw new HttpRequestException("AI Server is unreachable.", lastError);
     }
 
@@ -387,25 +397,27 @@ public class LlamaAIClient(
 
     private async IAsyncEnumerable<LlmExecutionCandidate> GetExecutionCandidatesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
-        var preferred = settings.GetActiveProvider("LLM")?.ModelId ?? "";
+        var configuredProvider = settings.GetActiveProvider("LLM");
+        var preferred = configuredProvider?.ModelId ?? "";
         var registryModel = await modelRegistry.ResolvePreferredModelAsync(ProviderCapability.Llm, preferred, ct);
         var candidates = new List<LlmExecutionCandidate>();
-        var configuredBaseUrl = NormalizeOpenAiBaseUrl(settings.GetActiveProvider("LLM")?.Url ?? "");
+        var configuredBaseUrl = NormalizeOpenAiBaseUrl(configuredProvider?.Url ?? "");
+        var configuredApiKey = GetApiKey(configuredProvider);
 
         if (!string.IsNullOrWhiteSpace(preferred) && !string.IsNullOrWhiteSpace(configuredBaseUrl))
-            candidates.Add(new LlmExecutionCandidate(configuredBaseUrl, preferred));
+            candidates.Add(new LlmExecutionCandidate(configuredBaseUrl, preferred, configuredApiKey));
 
         var registryEndpoint = NormalizeOpenAiBaseUrl(registryModel?.Endpoint);
         if (registryModel is not null && !string.IsNullOrWhiteSpace(registryEndpoint))
-            candidates.Add(new LlmExecutionCandidate(registryEndpoint, registryModel.Id));
+            candidates.Add(new LlmExecutionCandidate(registryEndpoint, registryModel.Id, configuredApiKey));
 
         var configuredModel = FirstNonEmpty(preferred, registryModel?.Id);
         if (!string.IsNullOrWhiteSpace(configuredModel))
         {
             if (!string.IsNullOrWhiteSpace(configuredBaseUrl) && !string.Equals(configuredBaseUrl, LocalBaseUrl, StringComparison.OrdinalIgnoreCase))
-                candidates.Add(new LlmExecutionCandidate(configuredBaseUrl, configuredModel));
+                candidates.Add(new LlmExecutionCandidate(configuredBaseUrl, configuredModel, configuredApiKey));
 
-            candidates.Add(new LlmExecutionCandidate(LocalBaseUrl, configuredModel));
+            candidates.Add(new LlmExecutionCandidate(LocalBaseUrl, configuredModel, null));
         }
 
         debugLogger.LogEvent(new DebugEvent(DateTime.Now, "LLM", LogLevel.Trace, "Resolved LLM execution candidates.", new { PreferredModelId = preferred, RegistryModelId = registryModel?.Id, ConfiguredBaseUrl = configuredBaseUrl, CandidateCount = candidates.Count }));
@@ -430,7 +442,10 @@ public class LlamaAIClient(
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(2));
-            using var response = await httpClient.GetAsync(BuildEndpoint(baseUrl, "models"), cts.Token);
+            using var request = new HttpRequestMessage(HttpMethod.Get, BuildEndpoint(baseUrl, "models"));
+            AddAuthorization(request, GetApiKey(settings.GetActiveProvider("LLM")));
+
+            using var response = await httpClient.SendAsync(request, cts.Token);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
@@ -446,7 +461,23 @@ public class LlamaAIClient(
     private static bool IsLocalBaseUrl(string baseUrl) =>
         string.Equals(NormalizeOpenAiBaseUrl(baseUrl), LocalBaseUrl, StringComparison.OrdinalIgnoreCase);
 
+    private static void AddAuthorization(HttpRequestMessage request, string? apiKey)
+    {
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+    }
+
+    private static string? GetApiKey(Core.Models.Settings.ProviderConfig? provider)
+    {
+        if (provider is null)
+            return null;
+
+        return provider.Parameters.TryGetValue("api_key", out var snakeCase) ? snakeCase
+            : provider.Parameters.TryGetValue("ApiKey", out var pascalCase) ? pascalCase
+            : null;
+    }
+
     private record LlamaModelsResponse(List<LlamaModel>? Data);
     private record LlamaModel(string Id);
-    private sealed record LlmExecutionCandidate(string BaseUrl, string ModelId);
+    private sealed record LlmExecutionCandidate(string BaseUrl, string ModelId, string? ApiKey);
 }

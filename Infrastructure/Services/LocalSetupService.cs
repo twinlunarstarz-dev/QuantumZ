@@ -111,7 +111,7 @@ public sealed class LocalSetupService(
         {
             logger.Log(
                 "LocalSetup",
-                $"Local setup is not ready. STT={sttReady} (runtime={sttRuntimeReady}), VAD={vadReady}, TTS={ttsReady} (Android built-in fallback selected={IsAndroidTtsSelected()}), LLM={llmReady} (runtime={llmRuntimeReady}). Packaged native runtimes are required for local LLM/STT providers; Piper is optional.",
+                $"Local setup is not ready. STT={sttReady} (runtime={sttRuntimeReady}), VAD={vadReady}, TTS={ttsReady} (Android built-in fallback selected={IsAndroidTtsSelected()}), LLM={llmReady} (runtime={llmRuntimeReady}). Packaged native runtimes are required for local LLM/STT providers.",
                 LogLevel.Warning);
         }
 
@@ -250,54 +250,30 @@ public sealed class LocalSetupService(
                 settingsService.UseOnDeviceStt = true;
                 settingsService.WhisperModelPath = localPath;
                 settingsService.SttSettings = BuildLocalProviderSettings(entry.Id, localPath);
-                settingsService.PipelineSettings = settingsService.PipelineSettings with
-                {
-                    Stt = BuildLocalStage(localPath)
-                };
                 break;
 
             case ProviderCapability.Vad when string.Equals(entry.Id, "rms-vad-built-in", StringComparison.OrdinalIgnoreCase):
                 settingsService.VadSettings = BuildFallbackProviderSettings("Built-In RMS VAD", "rms-vad-built-in");
-                settingsService.PipelineSettings = settingsService.PipelineSettings with
-                {
-                    Vad = new StageSettings { Enabled = true, Mode = ModelMode.BuiltIn }
-                };
                 break;
 
             case ProviderCapability.Vad when !string.IsNullOrWhiteSpace(localPath):
                 settingsService.VadSettings = BuildLocalProviderSettings(entry.Id, localPath);
-                settingsService.PipelineSettings = settingsService.PipelineSettings with
-                {
-                    Vad = BuildLocalStage(localPath)
-                };
                 break;
 
             case ProviderCapability.Tts when string.Equals(entry.Id, "android-tts-built-in", StringComparison.OrdinalIgnoreCase):
                 settingsService.UseLocalTts = false;
                 settingsService.TtsSettings = BuildFallbackProviderSettings("Android Built-In TTS", "builtin.android-tts");
-                settingsService.PipelineSettings = settingsService.PipelineSettings with
-                {
-                    Tts = new StageSettings { Enabled = true, Mode = ModelMode.BuiltIn }
-                };
                 break;
 
             case ProviderCapability.Tts when !string.IsNullOrWhiteSpace(localPath):
                 settingsService.UseLocalTts = true;
                 settingsService.TtsSettings = BuildLocalProviderSettings(entry.Id, localPath);
-                settingsService.PipelineSettings = settingsService.PipelineSettings with
-                {
-                    Tts = BuildLocalStage(localPath)
-                };
                 break;
 
             case ProviderCapability.Llm when !string.IsNullOrWhiteSpace(localPath):
                 settingsService.LlmSettings = new ServiceProviderSettings(
                     LocalSetupProviderName,
                     [new ProviderConfig(LocalSetupProviderName, ModelRegistry.LocalLlamaBaseUrl, localPath)]);
-                settingsService.PipelineSettings = settingsService.PipelineSettings with
-                {
-                    Llm = BuildLocalStage(localPath)
-                };
                 break;
         }
     }
@@ -328,16 +304,16 @@ public sealed class LocalSetupService(
     {
         ProviderCapability.Stt => NativeRuntimeKind.Stt,
         ProviderCapability.Llm => NativeRuntimeKind.Llm,
-        ProviderCapability.Tts when entry.Id.Contains("piper", StringComparison.OrdinalIgnoreCase) => NativeRuntimeKind.Tts,
+        // Piper TTS (NativeRuntimeKind.Tts) is not shipped in v1; Android TTS is the on-device fallback.
         _ => null
     };
 
     private bool IsRmsVadSelected() =>
-        settingsService.PipelineSettings.Vad.Mode == ModelMode.BuiltIn
+        false // Removed PipelineSettings dependency; rely on GetActiveProvider check below
         || string.Equals(settingsService.GetActiveProvider("VAD")?.ModelId, "rms-vad-built-in", StringComparison.OrdinalIgnoreCase);
 
     private bool IsAndroidTtsSelected() =>
-        settingsService.PipelineSettings.Tts.Mode == ModelMode.BuiltIn
+        false // Removed PipelineSettings dependency; rely on GetActiveProvider check below
         || string.Equals(settingsService.GetActiveProvider("TTS")?.ModelId, "builtin.android-tts", StringComparison.OrdinalIgnoreCase)
         || string.Equals(settingsService.GetActiveProvider("TTS")?.ModelId, "android-tts-built-in", StringComparison.OrdinalIgnoreCase);
 
@@ -347,7 +323,8 @@ public sealed class LocalSetupService(
         if (!string.IsNullOrWhiteSpace(selected) && File.Exists(selected))
             return selected;
 
-        var configured = settingsService.PipelineSettings.Llm.Local?.ModelPath?.Trim();
+        var activeLlm = settingsService.GetActiveProvider("LLM");
+        var configured = activeLlm?.Parameters.GetValueOrDefault("model_path")?.Trim();
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
             return configured;
 

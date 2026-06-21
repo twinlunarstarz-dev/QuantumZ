@@ -9,8 +9,7 @@ public partial class MainAssistantPage : ContentPage
     {
         None,
         Detail,
-        Memory,
-        Config
+        Memory
     }
 
     private CancellationTokenSource? _pulseCancellation;
@@ -18,6 +17,8 @@ public partial class MainAssistantPage : ContentPage
     private bool _visualizerEventsAttached;
     private readonly SemaphoreSlim _panelTransitionSemaphore = new(1, 1);
     private HudPanelMode _currentPanelMode = HudPanelMode.None;
+
+    // Removed Config panel mode as it is no longer used in XAML
 
     public MainAssistantPage(MainAssistantViewModel viewModel)
     {
@@ -34,10 +35,6 @@ public partial class MainAssistantPage : ContentPage
             else if (e.PropertyName == nameof(MainAssistantViewModel.IsMemoryViewOpen) && vm.IsMemoryViewOpen)
             {
                 _ = TransitionToPanelAsync(HudPanelMode.Memory);
-            }
-            else if (e.PropertyName == nameof(MainAssistantViewModel.IsConfigViewOpen) && vm.IsConfigViewOpen)
-            {
-                _ = TransitionToPanelAsync(HudPanelMode.Config);
             }
             else if ((e.PropertyName == nameof(MainAssistantViewModel.IsDetailViewOpen)
                     || e.PropertyName == nameof(MainAssistantViewModel.IsMemoryViewOpen)
@@ -185,11 +182,11 @@ public partial class MainAssistantPage : ContentPage
     }
     private async Task TransitionToPanelAsync(HudPanelMode mode)
     {
+        if (!await _panelTransitionSemaphore.WaitAsync(0).ConfigureAwait(true))
+            return;
+
         try
         {
-            if (!await _panelTransitionSemaphore.WaitAsync(0).ConfigureAwait(true))
-                return;
-
             if (_currentPanelMode == mode)
                 return;
 
@@ -198,11 +195,10 @@ public partial class MainAssistantPage : ContentPage
             {
                 HudPanelMode.Detail => DetailPanel,
                 HudPanelMode.Memory => MemoryPanel,
-                HudPanelMode.Config => ConfigPanel,
                 _ => null
             };
 
-            var panels = new[] { DetailPanel, MemoryPanel, ConfigPanel };
+            var panels = new[] { DetailPanel, MemoryPanel };
 
             if (target is not null)
             {

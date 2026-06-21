@@ -95,23 +95,7 @@ public sealed class ModelCatalogService
             IsRequiredForLocalSetup = true,
             Notes = "Release-safe TTS fallback; no local voice model download is required."
         },
-        new ModelCatalogEntry
-        {
-            Id = "piper-voice-optional",
-            Capability = ProviderCapability.Tts,
-            DisplayName = "Optional Piper local voice",
-            SourceRepository = "rhasspy/piper voices",
-            DownloadUrl = string.Empty,
-            FileName = "voice.onnx",
-            ExpectedBytes = null,
-            TargetRelativePath = Path.Combine("models", "tts", "piper", "voice.onnx"),
-            License = "Voice-dependent; verify the selected voice license before enabling",
-            RequiresAuth = false,
-            RequiresLicenseAcceptance = true,
-            IsProvisional = true,
-            IsRequiredForLocalSetup = false,
-            Notes = "Optional only. Requires the packaged QuantumZ Piper wrapper runtime libquantumz_piper.so on Android 10+ and a verified compatible voice license."
-        },
+        // Piper TTS is not shipped in v1. Android TTS is the on-device voice fallback.
         new ModelCatalogEntry
         {
             Id = "gemma-provisional-q4",

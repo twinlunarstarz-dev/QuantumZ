@@ -28,8 +28,9 @@ public interface ISettingsService
     bool EnableActivityLogging { get; set; }
     bool EnableActivityAnalysis { get; set; }
 
-    // On-Device STT
+    // On-Device Providers
     bool UseOnDeviceStt { get; set; }
+    bool UseLocalLlm { get; set; }
     bool UseLocalTts { get; set; }
     string WhisperModelPath { get; set; }
 
@@ -42,8 +43,6 @@ public interface ISettingsService
     string ObsidianVaultPath { get; set; }
 
     // V2 Pipeline Settings
-    /// <summary>Gets or sets the V2 pipeline stage configuration.</summary>
-    PipelineSettings PipelineSettings { get; set; }
 
     /// <summary>Gets or sets the voice assistant behavioral settings.</summary>
     VoiceAssistantSettings VoiceAssistantSettings { get; set; }

@@ -6,7 +6,7 @@ using QuantumZ.Android.Services;
 namespace QuantumZ.Android.Receivers;
 
 [BroadcastReceiver(Exported = false)]
-[IntentFilter(new[] { "com.quantumz.assistant.START_LISTENING", "com.quantumz.assistant.TEST_UTTERANCE" })]
+[IntentFilter(new[] { "com.quantumz.assistant.START_LISTENING" })]
 public class ListenBroadcastReceiver : BroadcastReceiver
 {
     public override void OnReceive(Context? context, Intent? intent)
@@ -18,15 +18,6 @@ public class ListenBroadcastReceiver : BroadcastReceiver
 
         var serviceIntent = new Intent(context, typeof(MicrophoneForegroundService));
         serviceIntent.SetAction(action);
-
-        if (action == "com.quantumz.assistant.TEST_UTTERANCE")
-        {
-            var utterance = intent.GetStringExtra("utterance");
-            if (!string.IsNullOrEmpty(utterance))
-            {
-                serviceIntent.PutExtra("utterance", utterance);
-            }
-        }
 
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
         {

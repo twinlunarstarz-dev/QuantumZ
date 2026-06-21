@@ -37,7 +37,9 @@ internal sealed class OnnxWakeWordProvider(ISettingsService settingsService, IDe
     /// <inheritdoc/>
     public async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
     {
-        var modelPath = settingsService.PipelineSettings.WakeWord.Local?.ModelPath;
+        // Wake word path is currently managed via VoiceAssistantSettings or defaults,
+        // as PipelineSettings was removed to unify on legacy provider sources of truth.
+        var modelPath = string.Empty;
 
         if (string.IsNullOrWhiteSpace(modelPath))
         {

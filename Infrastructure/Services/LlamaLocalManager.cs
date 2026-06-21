@@ -173,16 +173,13 @@ namespace QuantumZ.Infrastructure.Services
         private string BuildParamsJson()
         {
             var parameters = settings.GetActiveProvider("LLM")?.Parameters ?? [];
-            var additionalParameters = settings.PipelineSettings.Llm.Local?.AdditionalParameters;
-            if (parameters.Count == 0 && string.IsNullOrWhiteSpace(additionalParameters))
+            if (parameters.Count == 0)
                 return "{}";
 
             var payload = new Dictionary<string, object?>();
             foreach (var pair in parameters)
                 payload[pair.Key] = pair.Value;
 
-            if (!string.IsNullOrWhiteSpace(additionalParameters))
-                payload["additionalParameters"] = additionalParameters;
 
             return JsonSerializer.Serialize(payload);
         }

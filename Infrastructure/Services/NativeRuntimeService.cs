@@ -10,7 +10,8 @@ namespace QuantumZ.Infrastructure.Services;
 /// <remarks>
 /// These are stable QuantumZ C ABI wrapper libraries, not raw upstream project libraries.
 /// Future wrappers should expose flat init/load/infer/free-style entry points while keeping
-/// managed P/Invoke signatures insulated from upstream llama.cpp, whisper.cpp, and Piper churn.
+/// managed P/Invoke signatures insulated from upstream llama.cpp and whisper.cpp churn.
+/// Piper TTS was dropped for v1; Android TTS is the on-device voice fallback.
 /// </remarks>
 public sealed class NativeRuntimeService(IDebugLogger logger) : INativeRuntimeService
 {
@@ -34,15 +35,8 @@ public sealed class NativeRuntimeService(IDebugLogger logger) : INativeRuntimeSe
             RequiredForOnDeviceSetup = true,
             Description = "QuantumZ whisper.cpp wrapper for local STT init/load/transcribe/free operations."
         },
-        new NativeRuntimeRequirement
-        {
-            Kind = NativeRuntimeKind.Tts,
-            LibraryName = "quantumz_piper",
-            AndroidFileName = "libquantumz_piper.so",
-            Capability = ProviderCapability.Tts,
-            RequiredForOnDeviceSetup = false,
-            Description = "QuantumZ Piper wrapper for optional local TTS init/load/synthesize/free operations; Android TTS remains the release-safe fallback."
-        }
+        // Piper TTS (NativeRuntimeKind.Tts) is not shipped in v1.
+        // Android TTS is the on-device voice fallback.
     ];
 
     public IReadOnlyList<NativeRuntimeRequirement> GetRequirements() => Requirements;

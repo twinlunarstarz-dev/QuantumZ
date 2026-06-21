@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuantumZ.Core.Interfaces;
@@ -64,8 +65,20 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
 
         try
         {
+            var provider = settings.GetActiveProvider("TTS");
+
             debugLogger.LogEvent(new DebugEvent(DateTime.Now, "TTS", LogLevel.Info, "Synthesizing text.", new { TextLength = text.Length, ModelId = modelId, Endpoint = endpoint }));
-            using var response = await httpClient.PostAsJsonAsync(endpoint, requestBody, _jsonOptions, ct);
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(30)); // Reasonable default for TTS synthesis
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = JsonContent.Create(requestBody, options: _jsonOptions)
+            };
+
+            AddAuthorization(request, provider);
+            using var response = await httpClient.SendAsync(request, timeoutCts.Token);
             response.EnsureSuccessStatusCode();
             var audioBytes = await response.Content.ReadAsByteArrayAsync(ct);
             debugLogger.LogEvent(new DebugEvent(DateTime.Now, "TTS", LogLevel.Info, $"Synthesis complete: {audioBytes.Length} bytes", new { Bytes = audioBytes.Length }));
@@ -118,4 +131,21 @@ public sealed class TtsService(HttpClient httpClient, ISettingsService settings,
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static void AddAuthorization(HttpRequestMessage request, Core.Models.Settings.ProviderConfig? provider)
+    {
+        var apiKey = GetApiKey(provider);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+    }
+
+    private static string? GetApiKey(Core.Models.Settings.ProviderConfig? provider)
+    {
+        if (provider is null)
+            return null;
+
+        return provider.Parameters.TryGetValue("api_key", out var snakeCase) ? snakeCase
+            : provider.Parameters.TryGetValue("ApiKey", out var pascalCase) ? pascalCase
+            : null;
+    }
 }

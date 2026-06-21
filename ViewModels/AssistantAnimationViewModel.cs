@@ -288,31 +288,6 @@ public partial class MainAssistantViewModel
 #endif
     }
 
-    private async Task TestPipelineAsync()
-    {
-        try
-        {
-            if (!await EnsureSetupCompletedAsync())
-                return;
-
-#if ANDROID
-            var context = global::Android.App.Application.Context;
-            var intent = new global::Android.Content.Intent(context, typeof(global::QuantumZ.Android.Services.MicrophoneForegroundService));
-            intent.SetAction("com.quantumz.assistant.TEST_UTTERANCE");
-            intent.PutExtra("utterance", "hey quantum what is the current time");
-            if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.O)
-                context.StartForegroundService(intent);
-            else
-                context.StartService(intent);
-            AiStatusText = "Test pipeline started...";
-#endif
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Test pipeline failed: {ex}");
-            AiStatusText = "Test failed";
-        }
-    }
 }
 
 // ── Shared HUD display types ─────────────────────────────────────────────────

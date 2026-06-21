@@ -48,6 +48,8 @@ public partial class MainAssistantViewModel(
     private readonly IThermalMonitor _thermalMonitor = thermalMonitor ?? throw new ArgumentNullException(nameof(thermalMonitor));
     private readonly IDebugLogger _debugLogger = debugLogger ?? throw new ArgumentNullException(nameof(debugLogger));
     private readonly IPipelineStateService _pipelineStateService = pipelineStateService ?? throw new ArgumentNullException(nameof(pipelineStateService));
+    private static readonly TimeSpan RoutineServiceHealthRefreshThrottle = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan ForcedServiceHealthRefreshThrottle = TimeSpan.FromSeconds(30);
     private DateTime _lastServiceHealthRefreshUtc = DateTime.MinValue;
     private bool _serviceHealthRefreshInFlight;
 
@@ -291,9 +293,6 @@ public partial class MainAssistantViewModel(
 
     private ICommand? _analyzeNowCommand;
     public ICommand AnalyzeNowCommand => _analyzeNowCommand ??= new AsyncRelayCommand(AnalyzeNowAsync);
-
-    private ICommand? _testPipelineCommand;
-    public ICommand TestPipelineCommand => _testPipelineCommand ??= new AsyncRelayCommand(TestPipelineAsync);
 
     private void ToggleDetail()
     {
@@ -737,12 +736,21 @@ public partial class MainAssistantViewModel(
     private async Task RefreshServiceHealthAsync(bool force)
     {
         if (_serviceHealthRefreshInFlight)
+        {
+            _debugLogger.Log("HealthCheck", "Service health refresh skipped because a check is already running.", LogLevel.Debug);
             return;
+        }
 
-        if (!force && DateTime.UtcNow - _lastServiceHealthRefreshUtc < TimeSpan.FromMinutes(2))
+        var throttleInterval = force ? ForcedServiceHealthRefreshThrottle : RoutineServiceHealthRefreshThrottle;
+        var elapsedSinceLastRefresh = DateTime.UtcNow - _lastServiceHealthRefreshUtc;
+        if (elapsedSinceLastRefresh < throttleInterval)
+        {
+            _debugLogger.Log("HealthCheck", $"Service health refresh throttled after {elapsedSinceLastRefresh.TotalSeconds:F1}s; minimum interval is {throttleInterval.TotalSeconds:F0}s.", LogLevel.Debug);
             return;
+        }
 
         _serviceHealthRefreshInFlight = true;
+        _debugLogger.Log("HealthCheck", $"Starting silent service health refresh. Forced={force}.", LogLevel.Info);
         ServiceHealthSummaryText = "Running service smoke tests...";
         ReplaceServiceHealth([
             ServiceHealthMetric.Checking("LLM", "Testing server and response path"),
@@ -766,6 +774,7 @@ public partial class MainAssistantViewModel(
 
             ReplaceServiceHealth(checks);
             _lastServiceHealthRefreshUtc = DateTime.UtcNow;
+            LogServiceHealthResults(checks);
 
             var passCount = checks.Count(check => check.State == ServiceHealthState.Ready);
             var partialCount = checks.Count(check => check.State == ServiceHealthState.Partial);
@@ -796,6 +805,7 @@ public partial class MainAssistantViewModel(
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Service health refresh failed: {ex}");
+            _debugLogger.Log("HealthCheck", $"Silent service health refresh failed: {ex.Message}", LogLevel.Error);
             ServiceHealthSummaryText = "Health checks degraded";
             ReplaceServiceHealth([
                 ServiceHealthMetric.Failed("Health", $"Smoke tests failed: {ex.Message}")
@@ -805,6 +815,23 @@ public partial class MainAssistantViewModel(
         {
             _serviceHealthRefreshInFlight = false;
             await RefreshHudTelemetryAsync(force: true);
+        }
+    }
+
+    private void LogServiceHealthResults(IEnumerable<ServiceHealthMetric> checks)
+    {
+        foreach (var check in checks)
+        {
+            var level = check.State switch
+            {
+                ServiceHealthState.Ready => LogLevel.Info,
+                ServiceHealthState.Unconfigured => LogLevel.Info,
+                ServiceHealthState.Partial => LogLevel.Warning,
+                ServiceHealthState.Failed => LogLevel.Warning,
+                _ => LogLevel.Debug
+            };
+
+            _debugLogger.Log("HealthCheck", $"{check.Label}: {check.State} - {check.Value}", level);
         }
     }
 
